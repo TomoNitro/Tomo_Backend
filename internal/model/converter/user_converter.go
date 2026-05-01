@@ -17,7 +17,12 @@ func UserRegisterToResponse(user *entity.User, accessToken, refreshToken string)
 		},
 	}
 }
-
+func UserUpdateToResponse(user *entity.User) *model.UserUpdateResponse {
+	return &model.UserUpdateResponse{
+		Username: user.Username,
+		Email:    user.Email,
+	}
+}
 func UserLoginToResponse(user *entity.User, accessToken, refreshToken string) *model.UserLoginResponse {
 	return &model.UserLoginResponse{
 		AccessToken:  accessToken,
