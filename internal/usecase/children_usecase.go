@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 
 	"net/http"
 	"time"
@@ -25,17 +26,21 @@ type ChildrenUseCase struct {
 	Validate           *validator.Validate
 	ChildrenRepository *repository.ChildrenRepository
 	CoinRepository     *repository.CoinRepository
+	SavingGoalRepo     *repository.SavingGoalRepository
+	MarketRepository   *repository.MarketRepository
 	JWT                *helper.JWTHelper
 	Redis              *redis.Client
 }
 
-func NewChildrenUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, childrenRepository *repository.ChildrenRepository, coinRepository *repository.CoinRepository, jwt *helper.JWTHelper, redis *redis.Client) *ChildrenUseCase {
+func NewChildrenUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, childrenRepository *repository.ChildrenRepository, coinRepository *repository.CoinRepository, savingGoalRepo *repository.SavingGoalRepository, marketRepository *repository.MarketRepository, jwt *helper.JWTHelper, redis *redis.Client) *ChildrenUseCase {
 	return &ChildrenUseCase{
 		DB:                 db,
 		Log:                log,
 		Validate:           validate,
 		ChildrenRepository: childrenRepository,
 		CoinRepository:     coinRepository,
+		SavingGoalRepo:     savingGoalRepo,
+		MarketRepository:   marketRepository,
 		JWT:                jwt,
 		Redis:              redis,
 	}
@@ -178,6 +183,64 @@ func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.Children
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return converter.ChildrenLoginToResponse(child, accessToken, refreshToken), nil
+}
+
+func (u *ChildrenUseCase) SetSavingGoal(ctx context.Context, childID, marketID string) (resp *model.SavingGoalResponse, err error) {
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+	if marketID == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "market id is required")
+	}
+
+	market := new(entity.Market)
+	if err := u.MarketRepository.FindByCondition(tx, market, "id = ?", marketID); err != nil {
+		u.Log.Error("Failed to find market", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusNotFound, "market not found")
+	}
+
+	coin := new(entity.CoinTransaction)
+	if err := u.CoinRepository.FindByChildID(tx, coin, childID); err != nil {
+		u.Log.Error("Failed to get coin by child id", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusNotFound, "coin not found")
+	}
+
+	goal := new(entity.SavingGoal)
+	findErr := u.SavingGoalRepo.FindByChildID(tx, goal, childID)
+	if findErr != nil {
+		if !errors.Is(findErr, gorm.ErrRecordNotFound) {
+			u.Log.Error("Failed to get saving goal", zap.Error(findErr))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, findErr.Error())
+		}
+
+		goal = &entity.SavingGoal{
+			ID:          uuid.NewString(),
+			ChildID:     childID,
+			MarketID:    market.ID,
+			GoalName:    market.Title,
+			TargetCoin:  market.Price,
+			CurrentCoin: coin.Amount,
+		}
+		if err := u.SavingGoalRepo.Create(tx, goal); err != nil {
+			u.Log.Error("Failed to create saving goal", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	} else {
+		goal.MarketID = market.ID
+		goal.GoalName = market.Title
+		goal.TargetCoin = market.Price
+		goal.CurrentCoin = coin.Amount
+		if err := u.SavingGoalRepo.Update(tx, goal); err != nil {
+			u.Log.Error("Failed to update saving goal", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("Failed to commit transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return converter.SavingGoalToResponse(goal), nil
 }
 
 func (u *ChildrenUseCase) GetChildrenCoin(ctx context.Context, childID string) (resp *model.ChildrenCoinResponse, err error) {

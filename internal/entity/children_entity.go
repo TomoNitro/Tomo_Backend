@@ -10,6 +10,7 @@ type Children struct {
 	LoginAt         *time.Time       `gorm:"column:login_at"`
 	CreatedAt       time.Time        `gorm:"column:created_at;autoCreateTime"`
 	CoinTransaction *CoinTransaction `gorm:"foreignKey:ChildID"`
+	SavingGoal      *SavingGoal      `gorm:"foreignKey:ChildID"`
 }
 
 func (c *Children) TableName() string {

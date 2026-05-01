@@ -76,6 +76,25 @@ func (c *ChildrenController) ChildrenLogin(ctx *echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenLoginResponse]{Message: "Success login child", Data: response})
 }
 
+func (c *ChildrenController) SetSavingGoal(ctx *echo.Context) error {
+	childID := helper.GetActorID(ctx)
+	if childID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	marketID := ctx.Param("id")
+	if marketID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "market id is required")
+	}
+
+	response, err := c.ChildrenUseCase.SetSavingGoal(ctx.Request().Context(), childID, marketID)
+	if err != nil {
+		c.Logger.Error("Failed to set saving goal", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.SavingGoalResponse]{Message: "Success set saving goal", Data: response})
+}
+
 func (c *ChildrenController) GetChildrenCoin(ctx *echo.Context) error {
 	childID := helper.GetActorID(ctx)
 	if childID == "" {

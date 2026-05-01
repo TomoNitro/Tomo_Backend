@@ -33,6 +33,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	childrenOnly := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
 	childrenOnly.GET("/markets", r.MarketController.GetAllMarket)
 	childrenOnly.GET("/coins", r.ChildrenController.GetChildrenCoin)
+	childrenOnly.POST("/saving-goal/:id", r.ChildrenController.SetSavingGoal)
 
 	children := r.App.Group("/api/children")
 	children.POST("/login", r.ChildrenController.ChildrenLogin)
