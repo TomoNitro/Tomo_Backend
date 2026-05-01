@@ -37,6 +37,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 
 	parentChildren := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ParentOnly())
 	parentChildren.GET("", r.ChildrenController.GetChildrenByParent)
+	parentChildren.DELETE("/:id", r.ChildrenController.DeleteChildrenByParent)
 	parentChildren.POST("/register", r.ChildrenController.ChildrenRegister)
 
 }

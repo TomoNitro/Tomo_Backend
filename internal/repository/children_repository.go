@@ -30,3 +30,7 @@ func (c *ChildrenRepository) FindByParentID(db *gorm.DB, parentID string) ([]ent
 
 	return children, nil
 }
+
+func (c *ChildrenRepository) FindByIDAndParentID(db *gorm.DB, child *entity.Children, childID, parentID string) error {
+	return db.Where("id = ? AND parent_id = ?", childID, parentID).First(child).Error
+}

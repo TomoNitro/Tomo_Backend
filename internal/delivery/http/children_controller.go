@@ -49,6 +49,19 @@ func (c *ChildrenController) GetChildrenByParent(ctx *echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.WebResponse[[]model.ChildrenListResponse]{Message: "Success get children", Data: response})
 }
 
+func (c *ChildrenController) DeleteChildrenByParent(ctx *echo.Context) error {
+	parentID := helper.GetActorID(ctx)
+	childID := ctx.Param("id")
+
+	response, err := c.ChildrenUseCase.DeleteChildrenByParent(ctx.Request().Context(), parentID, childID)
+	if err != nil {
+		c.Logger.Error(err.Error())
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenDeleteResponse]{Message: "Success delete child", Data: response})
+}
+
 func (c *ChildrenController) ChildrenLogin(ctx *echo.Context) error {
 	request := new(model.ChildrenLoginRequest)
 	if err := ctx.Bind(request); err != nil {

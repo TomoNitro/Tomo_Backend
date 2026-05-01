@@ -100,6 +100,29 @@ func (u *ChildrenUseCase) GetChildrenByParent(ctx context.Context, parentID stri
 	return converter.ChildrenListToResponse(children), nil
 }
 
+func (u *ChildrenUseCase) DeleteChildrenByParent(ctx context.Context, parentID, childID string) (resp *model.ChildrenDeleteResponse, err error) {
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	child := new(entity.Children)
+	if err := u.ChildrenRepository.FindByIDAndParentID(tx, child, childID, parentID); err != nil {
+		u.Log.Error("Failed to find child by parent id", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusNotFound, "child not found")
+	}
+
+	if err := u.ChildrenRepository.Delete(tx, child); err != nil {
+		u.Log.Error("Failed to delete child", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("Failed to commit child delete transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return converter.ChildrenDeleteToResponse(child), nil
+}
+
 func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.ChildrenLoginRequest) (resp *model.ChildrenLoginResponse, err error) {
 	tx := u.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
