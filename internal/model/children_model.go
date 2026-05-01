@@ -15,6 +15,10 @@ type ChildrenListResponse struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 }
+type ChildrenDeleteResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
 type ChildrenRegisterResponse struct {
 	ID        string                `json:"id"`
 	Name      string                `json:"name"`

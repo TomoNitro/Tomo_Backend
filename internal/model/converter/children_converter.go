@@ -36,3 +36,10 @@ func ChildrenListToResponse(children []entity.Children) []model.ChildrenListResp
 
 	return responses
 }
+
+func ChildrenDeleteToResponse(child *entity.Children) *model.ChildrenDeleteResponse {
+	return &model.ChildrenDeleteResponse{
+		ID:   child.ID,
+		Name: child.Name,
+	}
+}
