@@ -32,6 +32,7 @@ func BootStrap(config *BootStrapConfig) {
 	financeThemeRepository := repository.NewFinanceThemeRepository(config.Log)
 	storyThemeRepository := repository.NewStoryThemeRepository(config.Log)
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
+	storyPlayRepository := repository.NewStoryPlayRepository(config.Log)
 	MarketRepository := repository.NewMarketRepository(config.Log)
 	storyWebhookURL := config.Config.GetString("STORY_WEBHOOK_URL")
 	if storyWebhookURL == "" {
@@ -41,11 +42,13 @@ func BootStrap(config *BootStrapConfig) {
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
 	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
+	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
 	themeController := http.NewThemeController(themeUseCase, config.Log)
 	storyHeaderController := http.NewStoryHeaderController(storyHeaderUseCase, config.Log)
+	storyPlayController := http.NewStoryPlayController(storyPlayUseCase, config.Log)
 	MarketController := http.NewMarketController(MarketUseCase, config.Log)
 
 	routeConfig := routing.RouteConfig{
@@ -54,6 +57,7 @@ func BootStrap(config *BootStrapConfig) {
 		ChildrenController:    childrenController,
 		ThemeController:       themeController,
 		StoryHeaderController: storyHeaderController,
+		StoryPlayController:   storyPlayController,
 		MarketController:      MarketController,
 		JWTHelper:             config.JWT,
 	}
