@@ -2,7 +2,7 @@ package entity
 
 type StoryTheme struct {
 	ID        string `gorm:"column:id;primaryKey"`
-	Topic     string `gorm:"column:topic"`
+	Title     string `gorm:"column:title"`
 	FullStory string `gorm:"column:full_story"`
 }
 

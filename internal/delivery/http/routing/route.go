@@ -13,6 +13,7 @@ type RouteConfig struct {
 	ChildrenController    *http.ChildrenController
 	ThemeController       *http.ThemeController
 	StoryHeaderController *http.StoryHeaderController
+	StoryPlayController   *http.StoryPlayController
 	MarketController      *http.MarketController
 	JWTHelper             *helper.JWTHelper
 }
@@ -40,6 +41,11 @@ func (r *RouteConfig) SetupGuestRoute() {
 	childrenOnly.GET("/coins", r.ChildrenController.GetChildrenCoin)
 	childrenOnly.POST("/saving-goal/:id", r.ChildrenController.SetSavingGoal)
 	childrenOnly.PUT("/name", r.ChildrenController.UpdateChildName)
+	childrenOnly.GET("/story-headers", r.StoryHeaderController.GetAllStoryByChildId)
+	childrenOnly.POST("/stories/:storyId/start", r.StoryPlayController.StartStory)
+
+	sessionsOnly := r.App.Group("/api/sessions", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
+	sessionsOnly.POST("/:sessionId/decision", r.StoryPlayController.MakeDecision)
 
 	children := r.App.Group("/api/children")
 	children.POST("/login", r.ChildrenController.ChildrenLogin)

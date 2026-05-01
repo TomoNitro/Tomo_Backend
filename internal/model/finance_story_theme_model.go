@@ -8,6 +8,6 @@ type Finance struct {
 	Topic string `json:"topic"`
 }
 type Story struct {
-	Topic     string `json:"topic"`
+	Title     string `json:"title"`
 	FullStory string `json:"fullStory"`
 }
