@@ -28,18 +28,22 @@ func BootStrap(config *BootStrapConfig) {
 	userRepository := repository.NewUserRepository(config.Log)
 	childrenRepository := repository.NewChildrenRepository(config.Log)
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
+	MarketRepository := repository.NewMarketRepository(config.Log)
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, config.JWT, config.Redis)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository)
+	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
 	storyHeaderController := http.NewStoryHeaderController(storyHeaderUseCase, config.Log)
+	MarketController := http.NewMarketController(MarketUseCase, config.Log)
 
 	routeConfig := routing.RouteConfig{
 		App:                   config.App,
 		UserController:        userController,
 		ChildrenController:    childrenController,
 		StoryHeaderController: storyHeaderController,
+		MarketController:      MarketController,
 		JWTHelper:             config.JWT,
 	}
 	routeConfig.SetUp()
