@@ -89,6 +89,17 @@ func (u *ChildrenUseCase) ChildrenRegister(ctx context.Context, parentId string,
 	}
 	return converter.ChildrenRegisterToResponse(child, accessToken, refreshToken), nil
 }
+
+func (u *ChildrenUseCase) GetChildrenByParent(ctx context.Context, parentID string) (resp []model.ChildrenListResponse, err error) {
+	children, err := u.ChildrenRepository.FindByParentID(u.DB.WithContext(ctx), parentID)
+	if err != nil {
+		u.Log.Error("Failed to get children by parent id", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return converter.ChildrenListToResponse(children), nil
+}
+
 func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.ChildrenLoginRequest) (resp *model.ChildrenLoginResponse, err error) {
 	tx := u.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()

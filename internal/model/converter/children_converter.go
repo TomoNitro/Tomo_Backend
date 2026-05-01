@@ -22,3 +22,17 @@ func ChildrenLoginToResponse(child *entity.Children, accessToken, refreshToken s
 		RefreshToken: refreshToken,
 	}
 }
+
+func ChildrenListToResponse(children []entity.Children) []model.ChildrenListResponse {
+	responses := make([]model.ChildrenListResponse, 0, len(children))
+
+	for _, child := range children {
+		responses = append(responses, model.ChildrenListResponse{
+			ID:        child.ID,
+			Name:      child.Name,
+			CreatedAt: child.CreatedAt,
+		})
+	}
+
+	return responses
+}
