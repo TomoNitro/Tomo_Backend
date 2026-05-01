@@ -22,7 +22,26 @@ func NewStoryHeaderController(usecase *usecase.StoryHeaderUseCase, logger *zap.L
 	}
 }
 func (p *StoryHeaderController) GetAllStoryByParentId(ctx *echo.Context) error {
+	actorType := helper.GetActorType(ctx)
+	if actorType != "parent" {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+	}
+
 	parentID := helper.GetActorID(ctx)
+	response, err := p.StoryHeaderUseCase.GetAllStoryByParentId(ctx.Request().Context(), parentID)
+	if err != nil {
+		p.Logger.Error("Failed to get story headers")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad request")
+	}
+	return ctx.JSON(http.StatusOK, model.WebResponse[*[]model.StoryHeaderResponse]{Data: response})
+}
+func (p *StoryHeaderController) GetAllStoryByChildId(ctx *echo.Context) error {
+	actorType := helper.GetActorType(ctx)
+	if actorType != "child" {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+	}
+
+	parentID := helper.GetParentID(ctx)
 	response, err := p.StoryHeaderUseCase.GetAllStoryByParentId(ctx.Request().Context(), parentID)
 	if err != nil {
 		p.Logger.Error("Failed to get story headers")
