@@ -43,3 +43,9 @@ func ChildrenDeleteToResponse(child *entity.Children) *model.ChildrenDeleteRespo
 		Name: child.Name,
 	}
 }
+
+func ChildrenCoinToResponse(coin *entity.CoinTransaction) *model.ChildrenCoinResponse {
+	return &model.ChildrenCoinResponse{
+		Amount: coin.Amount,
+	}
+}

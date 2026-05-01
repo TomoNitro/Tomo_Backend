@@ -27,10 +27,11 @@ type BootStrapConfig struct {
 func BootStrap(config *BootStrapConfig) {
 	userRepository := repository.NewUserRepository(config.Log)
 	childrenRepository := repository.NewChildrenRepository(config.Log)
+	coinRepository := repository.NewCoinRepository(config.Log)
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
 	MarketRepository := repository.NewMarketRepository(config.Log)
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
-	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, config.JWT, config.Redis)
+	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, config.JWT, config.Redis)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)

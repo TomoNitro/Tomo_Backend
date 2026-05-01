@@ -75,3 +75,18 @@ func (c *ChildrenController) ChildrenLogin(ctx *echo.Context) error {
 	}
 	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenLoginResponse]{Message: "Success login child", Data: response})
 }
+
+func (c *ChildrenController) GetChildrenCoin(ctx *echo.Context) error {
+	childID := helper.GetActorID(ctx)
+	if childID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	response, err := c.ChildrenUseCase.GetChildrenCoin(ctx.Request().Context(), childID)
+	if err != nil {
+		c.Logger.Error("Failed to get child coin", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenCoinResponse]{Message: "Success get child coin", Data: response})
+}
