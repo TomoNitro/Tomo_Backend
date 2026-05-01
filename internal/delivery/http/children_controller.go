@@ -49,6 +49,27 @@ func (c *ChildrenController) GetChildrenByParent(ctx *echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.WebResponse[[]model.ChildrenListResponse]{Message: "Success get children", Data: response})
 }
 
+func (c *ChildrenController) UpdateChildName(ctx *echo.Context) error {
+	request := new(model.ChildrenUpdateNameRequest)
+	if err := ctx.Bind(request); err != nil {
+		c.Logger.Error(err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	childID := helper.GetActorID(ctx)
+	if childID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	response, err := c.ChildrenUseCase.UpdateChildName(ctx.Request().Context(), childID, request)
+	if err != nil {
+		c.Logger.Error("Failed to update child name", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenUpdateNameResponse]{Message: "Success update child name", Data: response})
+}
+
 func (c *ChildrenController) DeleteChildrenByParent(ctx *echo.Context) error {
 	parentID := helper.GetActorID(ctx)
 	childID := ctx.Param("id")

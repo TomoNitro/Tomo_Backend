@@ -10,12 +10,19 @@ type ChildrenLoginRequest struct {
 	ChildID string `json:"childId" validate:"required,max=50"`
 	Pin     string `json:"pin" validate:"required,max=50"`
 }
+type ChildrenUpdateNameRequest struct {
+	Name string `json:"name" validate:"required,max=50"`
+}
 type ChildrenListResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 }
 type ChildrenDeleteResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+type ChildrenUpdateNameResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
