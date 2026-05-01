@@ -69,7 +69,7 @@ func (c *StoryPlayController) GenerateStorySummary(ctx *echo.Context) error {
 		return err
 	}
 
-	return ctx.JSON(http.StatusOK, model.WebResponse[model.GenerateStorySummaryWebhookResponse]{
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.StorySummaryRewardResponse]{
 		Message: "Success generate story summary",
 		Data:    response,
 	})

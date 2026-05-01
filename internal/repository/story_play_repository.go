@@ -36,10 +36,9 @@ func (r *StoryPlayRepository) CreateDecision(db *gorm.DB, decision *entity.Decis
 	return db.Create(decision).Error
 }
 
-func (r *StoryPlayRepository) CompleteLearningSession(db *gorm.DB, session *entity.LearningSession, result string) error {
+func (r *StoryPlayRepository) CompleteLearningSession(db *gorm.DB, session *entity.LearningSession) error {
 	return db.Model(session).Updates(map[string]interface{}{
-		"session_result": result,
-		"completed_at":   session.CompletedAt,
+		"completed_at": session.CompletedAt,
 	}).Error
 }
 

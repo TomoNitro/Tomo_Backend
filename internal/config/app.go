@@ -33,6 +33,8 @@ func BootStrap(config *BootStrapConfig) {
 	storyThemeRepository := repository.NewStoryThemeRepository(config.Log)
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
 	storyPlayRepository := repository.NewStoryPlayRepository(config.Log)
+	childProgressRepository := repository.NewChildProgressRepository(config.Log)
+	expTransactionRepository := repository.NewExpTransactionRepository(config.Log)
 	MarketRepository := repository.NewMarketRepository(config.Log)
 	storyWebhookURL := config.Config.GetString("STORY_WEBHOOK_URL")
 	if storyWebhookURL == "" {
@@ -46,7 +48,7 @@ func BootStrap(config *BootStrapConfig) {
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
 	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
-	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository, summaryWebhookURL)
+	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository, childProgressRepository, expTransactionRepository, coinRepository, summaryWebhookURL)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
