@@ -55,7 +55,7 @@ func (t *ThemeUseCase) GetFinanceAndStoryThemes(ctx context.Context) (*model.Sto
 
 	storyResponse := make([]model.Story, len(*storyThemes))
 	for i, theme := range *storyThemes {
-		storyResponse[i] = model.Story{Topic: theme.Topic}
+		storyResponse[i] = model.Story{Topic: theme.Topic, FullStory: theme.FullStory}
 	}
 
 	return &model.StoryFinaceThemeResponse{
