@@ -10,11 +10,11 @@ import (
 
 func NewEcho(config *viper.Viper) *echo.Echo {
 	app := echo.New()
-
 	// CORS configuration
 	app.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{
 			"https://tomo-frontend-rosy.vercel.app",
+			"http://localhost:3000",
 		},
 		AllowMethods: []string{
 			http.MethodGet,
@@ -29,7 +29,7 @@ func NewEcho(config *viper.Viper) *echo.Echo {
 			echo.HeaderAccept,
 			echo.HeaderAuthorization,
 		},
+		AllowCredentials: true, // penting kalau pakai JWT / cookies
 	}))
-
 	return app
 }

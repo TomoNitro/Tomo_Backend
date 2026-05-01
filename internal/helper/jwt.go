@@ -23,7 +23,7 @@ func NewJWTHelper(secret string, log *zap.Logger) *JWTHelper {
 func (j *JWTHelper) JWTGenerator(userId string) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userId,
-		"exp": time.Now().Add(15 * time.Minute).Unix(),
+		"exp": time.Now().Add(6 * time.Hour).Unix(),
 		"iat": time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
