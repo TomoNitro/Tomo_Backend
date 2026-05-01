@@ -13,10 +13,15 @@ func ConnectDB(viper *viper.Viper, log *zap.Logger) *gorm.DB {
 	dbURL := viper.GetString("DATABASE_URL")
 
 	if dbURL == "" {
-		log.Fatal("DATABASE_URL is  required")
+		log.Fatal("DATABASE_URL is required")
 	}
 
-	db, err := gorm.Open(postgres.Open(dbURL+"?sslmode=require"), &gorm.Config{})
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  dbURL,
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{
+		PrepareStmt: false,
+	})
 
 	if err != nil {
 		log.Fatal("failed to connect database", zap.Error(err))
