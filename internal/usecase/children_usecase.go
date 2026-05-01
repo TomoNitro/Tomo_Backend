@@ -116,6 +116,35 @@ func (u *ChildrenUseCase) GetChildrenByParent(ctx context.Context, parentID stri
 	return converter.ChildrenListToResponse(children), nil
 }
 
+func (u *ChildrenUseCase) UpdateChildName(ctx context.Context, childID string, req *model.ChildrenUpdateNameRequest) (resp *model.ChildrenUpdateNameResponse, err error) {
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	if err := u.Validate.Struct(req); err != nil {
+		u.Log.Error("struct request is invalid", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	child := new(entity.Children)
+	if err := u.ChildrenRepository.FindByID(tx, child, childID); err != nil {
+		u.Log.Error("Failed to find child", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusNotFound, "child not found")
+	}
+
+	child.Name = req.Name
+	if err := u.ChildrenRepository.Update(tx, child); err != nil {
+		u.Log.Error("Failed to update child", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("Failed to commit transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return converter.ChildrenUpdateNameToResponse(child), nil
+}
+
 func (u *ChildrenUseCase) DeleteChildrenByParent(ctx context.Context, parentID, childID string) (resp *model.ChildrenDeleteResponse, err error) {
 	tx := u.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()

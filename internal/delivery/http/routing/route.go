@@ -34,6 +34,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	childrenOnly.GET("/markets", r.MarketController.GetAllMarket)
 	childrenOnly.GET("/coins", r.ChildrenController.GetChildrenCoin)
 	childrenOnly.POST("/saving-goal/:id", r.ChildrenController.SetSavingGoal)
+	childrenOnly.PUT("/name", r.ChildrenController.UpdateChildName)
 
 	children := r.App.Group("/api/children")
 	children.POST("/login", r.ChildrenController.ChildrenLogin)
