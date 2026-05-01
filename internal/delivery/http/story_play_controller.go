@@ -58,3 +58,19 @@ func (c *StoryPlayController) MakeDecision(ctx *echo.Context) error {
 		Data:    response,
 	})
 }
+
+func (c *StoryPlayController) GenerateStorySummary(ctx *echo.Context) error {
+	sessionID := ctx.Param("sessionId")
+	actorChildID := helper.GetActorID(ctx)
+
+	response, err := c.StoryPlayUseCase.GenerateStorySummary(ctx.Request().Context(), actorChildID, sessionID)
+	if err != nil {
+		c.Logger.Error("failed to generate story summary", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[model.GenerateStorySummaryWebhookResponse]{
+		Message: "Success generate story summary",
+		Data:    response,
+	})
+}

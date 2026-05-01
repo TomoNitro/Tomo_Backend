@@ -1,8 +1,11 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -30,15 +33,19 @@ type StoryPlayUseCase struct {
 	Validate           *validator.Validate
 	StoryPlayRepo      *repository.StoryPlayRepository
 	ChildrenRepository *repository.ChildrenRepository
+	SummaryWebhookURL  string
+	HTTPClient         *http.Client
 }
 
-func NewStoryPlayUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, storyPlayRepo *repository.StoryPlayRepository, childrenRepository *repository.ChildrenRepository) *StoryPlayUseCase {
+func NewStoryPlayUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, storyPlayRepo *repository.StoryPlayRepository, childrenRepository *repository.ChildrenRepository, summaryWebhookURL string) *StoryPlayUseCase {
 	return &StoryPlayUseCase{
 		DB:                 db,
 		Log:                log,
 		Validate:           validate,
 		StoryPlayRepo:      storyPlayRepo,
 		ChildrenRepository: childrenRepository,
+		SummaryWebhookURL:  summaryWebhookURL,
+		HTTPClient:         &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -216,6 +223,76 @@ func (u *StoryPlayUseCase) MakeDecision(ctx context.Context, actorChildID, sessi
 	if err := tx.Commit().Error; err != nil {
 		u.Log.Error("failed to commit decision transaction", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return response, nil
+}
+
+func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildID, sessionID string) (model.GenerateStorySummaryWebhookResponse, error) {
+	if actorChildID == "" {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	if sessionID == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "session id is required")
+	}
+
+	session := new(entity.LearningSession)
+	if err := u.StoryPlayRepo.FindLearningSessionByIDAndChildID(u.DB.WithContext(ctx), session, sessionID, actorChildID); err != nil {
+		u.Log.Error("failed to find learning session for summary generation", zap.Error(err))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "session not found")
+		}
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if session.CompletedAt == nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "session is not completed")
+	}
+
+	webhookRequest := model.GenerateStorySummaryWebhookRequest{
+		SessionID: session.SessionID,
+	}
+	requestBody, err := json.Marshal(webhookRequest)
+	if err != nil {
+		u.Log.Error("failed to marshal generate story summary request", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, u.SummaryWebhookURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		u.Log.Error("failed to create generate story summary webhook request", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	httpResponse, err := u.HTTPClient.Do(httpRequest)
+	if err != nil {
+		u.Log.Error("failed to call generate story summary webhook", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+	defer httpResponse.Body.Close()
+
+	responseBody, err := io.ReadAll(httpResponse.Body)
+	if err != nil {
+		u.Log.Error("failed to read generate story summary webhook response", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+
+	if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
+		u.Log.Error("generate story summary webhook returned non-success status",
+			zap.Int("status_code", httpResponse.StatusCode),
+			zap.ByteString("response_body", responseBody),
+		)
+		return nil, echo.NewHTTPError(http.StatusBadGateway, string(responseBody))
+	}
+
+	response := make(model.GenerateStorySummaryWebhookResponse)
+	if len(responseBody) == 0 {
+		return response, nil
+	}
+
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		u.Log.Error("failed to unmarshal generate story summary webhook response", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
 	}
 
 	return response, nil

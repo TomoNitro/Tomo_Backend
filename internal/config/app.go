@@ -38,11 +38,15 @@ func BootStrap(config *BootStrapConfig) {
 	if storyWebhookURL == "" {
 		storyWebhookURL = "https://williamdarma-n8n.hf.space/webhook/create-story"
 	}
+	summaryWebhookURL := config.Config.GetString("STORY_SUMMARY_WEBHOOK_URL")
+	if summaryWebhookURL == "" {
+		summaryWebhookURL = "https://williamdarma-n8n.hf.space/webhook/generate-story-summary"
+	}
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
 	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
-	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository)
+	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository, summaryWebhookURL)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
