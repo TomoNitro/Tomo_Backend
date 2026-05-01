@@ -31,9 +31,13 @@ func BootStrap(config *BootStrapConfig) {
 	savingGoalRepository := repository.NewSavingGoalRepository(config.Log)
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
 	MarketRepository := repository.NewMarketRepository(config.Log)
+	storyWebhookURL := config.Config.GetString("STORY_WEBHOOK_URL")
+	if storyWebhookURL == "" {
+		storyWebhookURL = "https://williamdarma-n8n.hf.space/webhook/create-story"
+	}
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
-	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository)
+	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
