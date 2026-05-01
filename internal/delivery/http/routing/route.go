@@ -28,6 +28,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	parentOnly := r.App.Group("/api/parent", middleware.AuthMiddleware(r.JWTHelper), middleware.ParentOnly())
 	parentOnly.GET("/story-headers", r.StoryHeaderController.GetAllStoryByParentId)
 	parentOnly.PUT("/update", r.UserController.UpdateProfile)
+	parentOnly.GET("/info", r.UserController.GetParentInfo)
 
 	childrenOnly := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
 	childrenOnly.GET("/markets", r.MarketController.GetAllMarket)

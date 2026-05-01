@@ -165,6 +165,16 @@ func (u *UserUseCase) UserUpdateProfile(ctx context.Context, req *model.UserUpda
 	return converter.UserUpdateToResponse(user), nil
 }
 
+func (u *UserUseCase) GetParentInfo(ctx context.Context, parentID string) (resp *model.ParentInfoResponse, err error) {
+	user := new(entity.User)
+	if err := u.UserRepository.FindByCondition(u.DB.WithContext(ctx), user, "id = ?", parentID); err != nil {
+		u.Log.Error("Failed to find parent", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return converter.ParentInfoToResponse(user), nil
+}
+
 func (u *UserUseCase) RefreshToken(ctx context.Context, req *model.RequestRefreshToken) (resp *model.ResponseRefreshToken, err error) {
 	refreshValue, err := u.Redis.Get(ctx, req.RefreshToken).Result()
 	if err != nil {
