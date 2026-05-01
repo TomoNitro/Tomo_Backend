@@ -16,6 +16,6 @@ func NewChildrenRepository(Log *zap.Logger) *ChildrenRepository {
 		Log: Log,
 	}
 }
-func (c *ChildrenRepository) Login(db *gorm.DB, child *entity.Children, name string) error {
-	return db.Where("name = ?", name).First(child).Error
+func (c *ChildrenRepository) FindByID(db *gorm.DB, child *entity.Children, id string) error {
+	return db.Where("id = ?", id).First(child).Error
 }

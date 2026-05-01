@@ -61,14 +61,23 @@ func (u *ChildrenUseCase) ChildrenRegister(ctx context.Context, parentId string,
 		u.Log.Error(err.Error())
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	accessToken, err := u.JWT.JWTGenerator(child.ID)
+	accessToken, err := u.JWT.GenerateToken(helper.BuildAccessTokenClaims(child.ID, helper.ActorTypeChild, child.ParentId))
 	if err != nil {
 		u.Log.Error("Failed to create token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	refreshToken := uuid.New().String()
+	refreshPayload, err := helper.EncodeRefreshTokenPayload(helper.RefreshTokenPayload{
+		ActorID:   child.ID,
+		ActorType: helper.ActorTypeChild,
+		ParentID:  child.ParentId,
+	})
+	if err != nil {
+		u.Log.Error("Failed to encode refresh token payload", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
-	err = u.Redis.Set(ctx, refreshToken, child.ID, 24*time.Hour).Err()
+	err = u.Redis.Set(ctx, refreshToken, refreshPayload, 24*time.Hour).Err()
 	if err != nil {
 		u.Log.Error("Failed to set refresh token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -80,7 +89,7 @@ func (u *ChildrenUseCase) ChildrenRegister(ctx context.Context, parentId string,
 	}
 	return converter.ChildrenRegisterToResponse(child, accessToken, refreshToken), nil
 }
-func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.ChildrenRequest) (resp *model.ChildrenLoginResponse, err error) {
+func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.ChildrenLoginRequest) (resp *model.ChildrenLoginResponse, err error) {
 	tx := u.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
@@ -89,7 +98,7 @@ func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.Children
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	child := &entity.Children{}
-	if err := u.ChildrenRepository.Login(tx, child, req.Name); err != nil {
+	if err := u.ChildrenRepository.FindByID(tx, child, req.ChildID); err != nil {
 		u.Log.Error("Invalid child pin", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -97,14 +106,23 @@ func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.Children
 		u.Log.Error("Invalid credentials", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	accessToken, err := u.JWT.JWTGenerator(child.ID)
+	accessToken, err := u.JWT.GenerateToken(helper.BuildAccessTokenClaims(child.ID, helper.ActorTypeChild, child.ParentId))
 	if err != nil {
 		u.Log.Error("Failed to create token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	refreshToken := uuid.New().String()
+	refreshPayload, err := helper.EncodeRefreshTokenPayload(helper.RefreshTokenPayload{
+		ActorID:   child.ID,
+		ActorType: helper.ActorTypeChild,
+		ParentID:  child.ParentId,
+	})
+	if err != nil {
+		u.Log.Error("Failed to encode refresh token payload", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
-	err = u.Redis.Set(ctx, refreshToken, child.ID, 24*time.Hour).Err()
+	err = u.Redis.Set(ctx, refreshToken, refreshPayload, 24*time.Hour).Err()
 	if err != nil {
 		u.Log.Error("Failed to set refresh token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())

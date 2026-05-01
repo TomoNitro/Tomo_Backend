@@ -26,13 +26,17 @@ type BootStrapConfig struct {
 
 func BootStrap(config *BootStrapConfig) {
 	userRepository := repository.NewUserRepository(config.Log)
+	childrenRepository := repository.NewChildrenRepository(config.Log)
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
+	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, config.JWT, config.Redis)
 	userController := http.NewUserController(userUseCase, config.Log)
+	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
 
 	routeConfig := routing.RouteConfig{
-		App:            config.App,
-		UserController: userController,
-		JWTHelper:      config.JWT,
+		App:                config.App,
+		UserController:     userController,
+		ChildrenController: childrenController,
+		JWTHelper:          config.JWT,
 	}
 	routeConfig.SetUp()
 }
