@@ -26,14 +26,10 @@ func AuthMiddleware(jwt *helper.JWTHelper) echo.MiddlewareFunc {
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid or expired token")
 			}
-			tokenClaims, err := helper.ParseTokenClaims(claims)
-			if err != nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token claims")
-			}
 
-			c.Set(helper.ContextActorID, tokenClaims.Subject)
-			c.Set(helper.ContextActorType, tokenClaims.ActorType)
-			c.Set(helper.ContextParentID, tokenClaims.ParentID)
+			c.Set(helper.ContextActorID, claims.Subject)
+			c.Set(helper.ContextActorType, claims.ActorType)
+			c.Set(helper.ContextParentID, claims.ParentID)
 			return next(c)
 		}
 	}

@@ -3,7 +3,6 @@ package helper
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -27,7 +26,12 @@ type TokenClaims struct {
 	ParentID    string
 	SessionType string
 }
-
+type CustomClaims struct {
+	ActorType   string `json:"actor_type"`
+	ParentID    string `json:"parent_id"`
+	SessionType string `json:"session_type"`
+	jwt.RegisteredClaims
+}
 type RefreshTokenPayload struct {
 	ActorID   string `json:"actor_id"`
 	ActorType string `json:"actor_type"`
@@ -42,44 +46,42 @@ func NewJWTHelper(secret string, log *zap.Logger) *JWTHelper {
 }
 
 func (j *JWTHelper) GenerateToken(tokenClaims TokenClaims) (string, error) {
-	claims := jwt.MapClaims{
-		"sub":          tokenClaims.Subject,
-		"actor_type":   tokenClaims.ActorType,
-		"parent_id":    tokenClaims.ParentID,
-		"session_type": tokenClaims.SessionType,
-		"exp":          time.Now().Add(6 * time.Hour).Unix(),
-		"iat":          time.Now().Unix(),
+	claims := CustomClaims{
+		ActorType:   tokenClaims.ActorType,
+		ParentID:    tokenClaims.ParentID,
+		SessionType: tokenClaims.SessionType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   tokenClaims.Subject,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(6 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	tokenString, err := token.SignedString([]byte(j.Secret))
-	if err != nil {
-		j.Log.Error(err.Error())
-		return tokenString, err
-	}
-	return tokenString, err
+	return token.SignedString([]byte(j.Secret))
 }
+func (j *JWTHelper) ValidateToken(tokenString string) (*CustomClaims, error) {
+	claims := &CustomClaims{}
 
-func (j *JWTHelper) ValidateToken(tokenString string) (jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return []byte(j.Secret), nil
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		claims,
+		func(t *jwt.Token) (interface{}, error) {
+			return []byte(j.Secret), nil
+		},
+	)
 
-	})
 	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			j.Log.Error("token has expired")
-		}
-		j.Log.Error("Invalid token")
+		j.Log.Error("JWT parse error", zap.Error(err))
+		return nil, err
 	}
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		return claims, nil
-	}
-	return nil, err
-}
 
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
+}
 func BuildAccessTokenClaims(actorID, actorType, parentID string) TokenClaims {
 	if parentID == "" {
 		parentID = actorID
