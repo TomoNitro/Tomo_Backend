@@ -8,10 +8,11 @@ import (
 )
 
 type RouteConfig struct {
-	App                *echo.Echo
-	UserController     *http.UserController
-	ChildrenController *http.ChildrenController
-	JWTHelper          *helper.JWTHelper
+	App                   *echo.Echo
+	UserController        *http.UserController
+	ChildrenController    *http.ChildrenController
+	StoryHeaderController *http.StoryHeaderController
+	JWTHelper             *helper.JWTHelper
 }
 
 func (r *RouteConfig) SetUp() {
@@ -22,6 +23,9 @@ func (r *RouteConfig) SetupGuestRoute() {
 	user.POST("/register", r.UserController.Register)
 	user.POST("/login", r.UserController.Login)
 	user.POST("/refresh-token", r.UserController.RefreshToken)
+
+	parentOnly := r.App.Group("/api/parent", middleware.AuthMiddleware(r.JWTHelper), middleware.ParentOnly())
+	parentOnly.GET("/story-headers", r.StoryHeaderController.GetAllStoryByParentId)
 
 	children := r.App.Group("/api/children")
 	children.POST("/login", r.ChildrenController.ChildrenLogin)
