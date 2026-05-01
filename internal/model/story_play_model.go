@@ -41,3 +41,9 @@ type StoryPlaySummaryResponse struct {
 type StoryPlayProgressResponse struct {
 	StepsTaken int64 `json:"steps_taken"`
 }
+
+type GenerateStorySummaryWebhookRequest struct {
+	SessionID string `json:"session_id"`
+}
+
+type GenerateStorySummaryWebhookResponse map[string]interface{}

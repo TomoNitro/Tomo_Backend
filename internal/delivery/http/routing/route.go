@@ -46,6 +46,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 
 	sessionsOnly := r.App.Group("/api/sessions", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
 	sessionsOnly.POST("/:sessionId/decision", r.StoryPlayController.MakeDecision)
+	sessionsOnly.POST("/:sessionId/summary/generate", r.StoryPlayController.GenerateStorySummary)
 
 	children := r.App.Group("/api/children")
 	children.POST("/login", r.ChildrenController.ChildrenLogin)
