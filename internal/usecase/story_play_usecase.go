@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"example.com/tomo/internal/entity"
@@ -21,10 +22,9 @@ import (
 )
 
 const (
-	storyChoiceWise      = "wise"
-	storyChoiceImpulsive = "impulsive"
-	sessionResultGood    = "good"
-	sessionResultBad     = "bad"
+	storyChoiceWise        = "wise"
+	storyChoiceImpulsive   = "impulsive"
+	expSourceStoryComplete = "story_complete"
 )
 
 type StoryPlayUseCase struct {
@@ -33,17 +33,23 @@ type StoryPlayUseCase struct {
 	Validate           *validator.Validate
 	StoryPlayRepo      *repository.StoryPlayRepository
 	ChildrenRepository *repository.ChildrenRepository
+	ChildProgressRepo  *repository.ChildProgressRepository
+	ExpTransactionRepo *repository.ExpTransactionRepository
+	CoinRepository     *repository.CoinRepository
 	SummaryWebhookURL  string
 	HTTPClient         *http.Client
 }
 
-func NewStoryPlayUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, storyPlayRepo *repository.StoryPlayRepository, childrenRepository *repository.ChildrenRepository, summaryWebhookURL string) *StoryPlayUseCase {
+func NewStoryPlayUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, storyPlayRepo *repository.StoryPlayRepository, childrenRepository *repository.ChildrenRepository, childProgressRepo *repository.ChildProgressRepository, expTransactionRepo *repository.ExpTransactionRepository, coinRepository *repository.CoinRepository, summaryWebhookURL string) *StoryPlayUseCase {
 	return &StoryPlayUseCase{
 		DB:                 db,
 		Log:                log,
 		Validate:           validate,
 		StoryPlayRepo:      storyPlayRepo,
 		ChildrenRepository: childrenRepository,
+		ChildProgressRepo:  childProgressRepo,
+		ExpTransactionRepo: expTransactionRepo,
+		CoinRepository:     coinRepository,
 		SummaryWebhookURL:  summaryWebhookURL,
 		HTTPClient:         &http.Client{Timeout: 5 * time.Minute},
 	}
@@ -192,14 +198,9 @@ func (u *StoryPlayUseCase) MakeDecision(ctx context.Context, actorChildID, sessi
 
 	if nextNode.EndingNode {
 		now := time.Now()
-		result := sessionResultBad
-		if isWise {
-			result = sessionResultGood
-		}
 		session.CompletedAt = &now
-		session.SessionResult = &result
 
-		if err := u.StoryPlayRepo.CompleteLearningSession(tx, session, result); err != nil {
+		if err := u.StoryPlayRepo.CompleteLearningSession(tx, session); err != nil {
 			u.Log.Error("failed to complete learning session", zap.Error(err))
 			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
@@ -228,7 +229,7 @@ func (u *StoryPlayUseCase) MakeDecision(ctx context.Context, actorChildID, sessi
 	return response, nil
 }
 
-func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildID, sessionID string) (model.GenerateStorySummaryWebhookResponse, error) {
+func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildID, sessionID string) (*model.StorySummaryRewardResponse, error) {
 	if actorChildID == "" {
 		return nil, echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
@@ -246,6 +247,14 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 	}
 	if session.CompletedAt == nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "session is not completed")
+	}
+	rewardCount, err := u.ExpTransactionRepo.CountBySourceAndReferenceID(u.DB.WithContext(ctx), expSourceStoryComplete, session.SessionID)
+	if err != nil {
+		u.Log.Error("failed to check existing story summary reward", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if rewardCount > 0 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "story summary reward already claimed")
 	}
 
 	webhookRequest := model.GenerateStorySummaryWebhookRequest{
@@ -285,15 +294,157 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 		return nil, echo.NewHTTPError(http.StatusBadGateway, string(responseBody))
 	}
 
-	response := make(model.GenerateStorySummaryWebhookResponse)
+	webhookResponse := make(model.GenerateStorySummaryWebhookResponse)
 	if len(responseBody) == 0 {
-		return response, nil
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "generate story summary webhook returned empty response")
 	}
 
-	if err := json.Unmarshal(responseBody, &response); err != nil {
+	if err := json.Unmarshal(responseBody, &webhookResponse); err != nil {
 		u.Log.Error("failed to unmarshal generate story summary webhook response", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
 	}
 
-	return response, nil
+	exp, err := intFromWebhookValue(webhookResponse["exp"])
+	if err != nil {
+		u.Log.Error("failed to parse exp reward", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid exp reward from webhook")
+	}
+	coins, err := intFromWebhookValue(webhookResponse["coins"])
+	if err != nil {
+		u.Log.Error("failed to parse coin reward", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid coin reward from webhook")
+	}
+
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	session = new(entity.LearningSession)
+	if err := u.StoryPlayRepo.FindLearningSessionByIDAndChildID(tx, session, sessionID, actorChildID); err != nil {
+		u.Log.Error("failed to find learning session before saving reward", zap.Error(err))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "session not found")
+		}
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if session.CompletedAt == nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "session is not completed")
+	}
+	rewardCount, err = u.ExpTransactionRepo.CountBySourceAndReferenceID(tx, expSourceStoryComplete, session.SessionID)
+	if err != nil {
+		u.Log.Error("failed to recheck existing story summary reward", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if rewardCount > 0 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "story summary reward already claimed")
+	}
+
+	progress := new(entity.ChildProgress)
+	progressErr := u.ChildProgressRepo.FindByChildID(tx, progress, actorChildID)
+	if progressErr != nil {
+		if !errors.Is(progressErr, gorm.ErrRecordNotFound) {
+			u.Log.Error("failed to find child progress", zap.Error(progressErr))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, progressErr.Error())
+		}
+
+		progress = &entity.ChildProgress{
+			ChildID:  actorChildID,
+			TotalExp: exp,
+			Level:    calculateChildLevel(exp),
+		}
+		if err := u.ChildProgressRepo.Create(tx, progress); err != nil {
+			u.Log.Error("failed to create child progress", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	} else {
+		progress.TotalExp += exp
+		progress.Level = calculateChildLevel(progress.TotalExp)
+		if err := u.ChildProgressRepo.Update(tx, progress); err != nil {
+			u.Log.Error("failed to update child progress", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	}
+
+	referenceID := session.SessionID
+	expTransaction := &entity.ExpTransaction{
+		ID:          uuid.NewString(),
+		ChildID:     actorChildID,
+		Amount:      exp,
+		Source:      expSourceStoryComplete,
+		ReferenceID: &referenceID,
+	}
+	if err := u.ExpTransactionRepo.Create(tx, expTransaction); err != nil {
+		u.Log.Error("failed to create exp transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	coinTransaction := &entity.CoinTransaction{
+		ID:      uuid.NewString(),
+		ChildID: actorChildID,
+		Amount:  coins,
+	}
+	if err := u.CoinRepository.Create(tx, coinTransaction); err != nil {
+		u.Log.Error("failed to create coin transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	totalCoins, err := u.CoinRepository.SumAmountByChildID(tx, actorChildID)
+	if err != nil {
+		u.Log.Error("failed to get child coin total", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("failed to commit story summary reward transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return &model.StorySummaryRewardResponse{
+		ID:          stringFromWebhookValue(webhookResponse["id"]),
+		Title:       stringFromWebhookValue(webhookResponse["title"]),
+		Description: stringFromWebhookValue(webhookResponse["description"]),
+		Performance: stringFromWebhookValue(webhookResponse["performance"]),
+		Exp:         exp,
+		Coins:       coins,
+		TotalExp:    progress.TotalExp,
+		Level:       progress.Level,
+		TotalCoins:  totalCoins,
+	}, nil
+}
+
+func intFromWebhookValue(value interface{}) (int, error) {
+	switch typedValue := value.(type) {
+	case string:
+		return strconv.Atoi(typedValue)
+	case float64:
+		return int(typedValue), nil
+	case int:
+		return typedValue, nil
+	default:
+		return 0, errors.New("value is not an integer")
+	}
+}
+
+func stringFromWebhookValue(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+
+	switch typedValue := value.(type) {
+	case string:
+		return typedValue
+	case float64:
+		return strconv.FormatFloat(typedValue, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(typedValue)
+	default:
+		return ""
+	}
+}
+
+func calculateChildLevel(totalExp int) int {
+	if totalExp < 0 {
+		return 1
+	}
+
+	return (totalExp / 100) + 1
 }

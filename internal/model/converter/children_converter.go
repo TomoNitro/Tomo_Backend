@@ -51,8 +51,8 @@ func ChildrenUpdateNameToResponse(child *entity.Children) *model.ChildrenUpdateN
 	}
 }
 
-func ChildrenCoinToResponse(coin *entity.CoinTransaction) *model.ChildrenCoinResponse {
+func ChildrenCoinToResponse(amount int) *model.ChildrenCoinResponse {
 	return &model.ChildrenCoinResponse{
-		Amount: coin.Amount,
+		Amount: amount,
 	}
 }

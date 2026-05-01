@@ -47,3 +47,15 @@ type GenerateStorySummaryWebhookRequest struct {
 }
 
 type GenerateStorySummaryWebhookResponse map[string]interface{}
+
+type StorySummaryRewardResponse struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Performance string `json:"performance"`
+	Exp         int    `json:"exp"`
+	Coins       int    `json:"coins"`
+	TotalExp    int    `json:"total_exp"`
+	Level       int    `json:"level"`
+	TotalCoins  int    `json:"total_coins"`
+}

@@ -227,10 +227,10 @@ func (u *ChildrenUseCase) SetSavingGoal(ctx context.Context, childID, marketID s
 		return nil, echo.NewHTTPError(http.StatusNotFound, "market not found")
 	}
 
-	coin := new(entity.CoinTransaction)
-	if err := u.CoinRepository.FindByChildID(tx, coin, childID); err != nil {
-		u.Log.Error("Failed to get coin by child id", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusNotFound, "coin not found")
+	totalCoin, err := u.CoinRepository.SumAmountByChildID(tx, childID)
+	if err != nil {
+		u.Log.Error("Failed to get child coin total", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	goal := new(entity.SavingGoal)
@@ -247,7 +247,7 @@ func (u *ChildrenUseCase) SetSavingGoal(ctx context.Context, childID, marketID s
 			MarketID:    market.ID,
 			GoalName:    market.Title,
 			TargetCoin:  market.Price,
-			CurrentCoin: coin.Amount,
+			CurrentCoin: totalCoin,
 		}
 		if err := u.SavingGoalRepo.Create(tx, goal); err != nil {
 			u.Log.Error("Failed to create saving goal", zap.Error(err))
@@ -257,7 +257,7 @@ func (u *ChildrenUseCase) SetSavingGoal(ctx context.Context, childID, marketID s
 		goal.MarketID = market.ID
 		goal.GoalName = market.Title
 		goal.TargetCoin = market.Price
-		goal.CurrentCoin = coin.Amount
+		goal.CurrentCoin = totalCoin
 		if err := u.SavingGoalRepo.Update(tx, goal); err != nil {
 			u.Log.Error("Failed to update saving goal", zap.Error(err))
 			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -273,11 +273,11 @@ func (u *ChildrenUseCase) SetSavingGoal(ctx context.Context, childID, marketID s
 }
 
 func (u *ChildrenUseCase) GetChildrenCoin(ctx context.Context, childID string) (resp *model.ChildrenCoinResponse, err error) {
-	coin := new(entity.CoinTransaction)
-	if err := u.CoinRepository.FindByChildID(u.DB.WithContext(ctx), coin, childID); err != nil {
-		u.Log.Error("Failed to get coin by child id", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusNotFound, "coin not found")
+	totalCoin, err := u.CoinRepository.SumAmountByChildID(u.DB.WithContext(ctx), childID)
+	if err != nil {
+		u.Log.Error("Failed to get child coin total", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	return converter.ChildrenCoinToResponse(coin), nil
+	return converter.ChildrenCoinToResponse(totalCoin), nil
 }
