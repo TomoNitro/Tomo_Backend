@@ -27,5 +27,6 @@ func (r *RouteConfig) SetupGuestRoute() {
 	children.POST("/login", r.ChildrenController.ChildrenLogin)
 
 	parentChildren := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ParentOnly())
+	parentChildren.GET("", r.ChildrenController.GetChildrenByParent)
 	parentChildren.POST("/register", r.ChildrenController.ChildrenRegister)
 }

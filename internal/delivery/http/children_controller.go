@@ -36,6 +36,19 @@ func (c *ChildrenController) ChildrenRegister(ctx *echo.Context) error {
 	}
 	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenRegisterResponse]{Message: "Success create child", Data: response})
 }
+
+func (c *ChildrenController) GetChildrenByParent(ctx *echo.Context) error {
+	parentID := helper.GetActorID(ctx)
+
+	response, err := c.ChildrenUseCase.GetChildrenByParent(ctx.Request().Context(), parentID)
+	if err != nil {
+		c.Logger.Error(err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[[]model.ChildrenListResponse]{Message: "Success get children", Data: response})
+}
+
 func (c *ChildrenController) ChildrenLogin(ctx *echo.Context) error {
 	request := new(model.ChildrenLoginRequest)
 	if err := ctx.Bind(request); err != nil {
