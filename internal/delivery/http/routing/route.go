@@ -11,6 +11,7 @@ type RouteConfig struct {
 	App                   *echo.Echo
 	UserController        *http.UserController
 	ChildrenController    *http.ChildrenController
+	ThemeController       *http.ThemeController
 	StoryHeaderController *http.StoryHeaderController
 	MarketController      *http.MarketController
 	JWTHelper             *helper.JWTHelper
@@ -20,6 +21,9 @@ func (r *RouteConfig) SetUp() {
 	r.SetupGuestRoute()
 }
 func (r *RouteConfig) SetupGuestRoute() {
+	theme := r.App.Group("/api/themes")
+	theme.GET("", r.ThemeController.GetThemes)
+
 	user := r.App.Group("/api/user")
 	user.POST("/register", r.UserController.Register)
 	user.POST("/login", r.UserController.Login)

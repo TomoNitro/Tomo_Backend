@@ -29,6 +29,8 @@ func BootStrap(config *BootStrapConfig) {
 	childrenRepository := repository.NewChildrenRepository(config.Log)
 	coinRepository := repository.NewCoinRepository(config.Log)
 	savingGoalRepository := repository.NewSavingGoalRepository(config.Log)
+	financeThemeRepository := repository.NewFinanceThemeRepository(config.Log)
+	storyThemeRepository := repository.NewStoryThemeRepository(config.Log)
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
 	MarketRepository := repository.NewMarketRepository(config.Log)
 	storyWebhookURL := config.Config.GetString("STORY_WEBHOOK_URL")
@@ -37,10 +39,12 @@ func BootStrap(config *BootStrapConfig) {
 	}
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
+	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
+	themeController := http.NewThemeController(themeUseCase, config.Log)
 	storyHeaderController := http.NewStoryHeaderController(storyHeaderUseCase, config.Log)
 	MarketController := http.NewMarketController(MarketUseCase, config.Log)
 
@@ -48,6 +52,7 @@ func BootStrap(config *BootStrapConfig) {
 		App:                   config.App,
 		UserController:        userController,
 		ChildrenController:    childrenController,
+		ThemeController:       themeController,
 		StoryHeaderController: storyHeaderController,
 		MarketController:      MarketController,
 		JWTHelper:             config.JWT,
