@@ -91,3 +91,21 @@ func (u *UserController) UpdateProfile(ctx *echo.Context) error {
 		Data:    response,
 	})
 }
+
+func (u *UserController) GetParentInfo(ctx *echo.Context) error {
+	parentID := helper.GetParentID(ctx)
+	if parentID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	response, err := u.UserUseCase.GetParentInfo(ctx.Request().Context(), parentID)
+	if err != nil {
+		u.Logger.Error("Failed to get parent info", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ParentInfoResponse]{
+		Message: "Success get parent info",
+		Data:    response,
+	})
+}

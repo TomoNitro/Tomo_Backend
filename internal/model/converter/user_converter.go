@@ -34,3 +34,10 @@ func RefreshTokenToReponse(accessToken string) *model.ResponseRefreshToken {
 		AccessToken: accessToken,
 	}
 }
+
+func ParentInfoToResponse(user *entity.User) *model.ParentInfoResponse {
+	return &model.ParentInfoResponse{
+		Username: user.Username,
+		Email:    user.Email,
+	}
+}

@@ -36,3 +36,8 @@ type RequestRefreshToken struct {
 type ResponseRefreshToken struct {
 	AccessToken string `json:"accessToken"`
 }
+
+type ParentInfoResponse struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
