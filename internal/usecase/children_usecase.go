@@ -24,16 +24,18 @@ type ChildrenUseCase struct {
 	Log                *zap.Logger
 	Validate           *validator.Validate
 	ChildrenRepository *repository.ChildrenRepository
+	CoinRepository     *repository.CoinRepository
 	JWT                *helper.JWTHelper
 	Redis              *redis.Client
 }
 
-func NewChildrenUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, childrenRepository *repository.ChildrenRepository, jwt *helper.JWTHelper, redis *redis.Client) *ChildrenUseCase {
+func NewChildrenUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, childrenRepository *repository.ChildrenRepository, coinRepository *repository.CoinRepository, jwt *helper.JWTHelper, redis *redis.Client) *ChildrenUseCase {
 	return &ChildrenUseCase{
 		DB:                 db,
 		Log:                log,
 		Validate:           validate,
 		ChildrenRepository: childrenRepository,
+		CoinRepository:     coinRepository,
 		JWT:                jwt,
 		Redis:              redis,
 	}
@@ -59,6 +61,15 @@ func (u *ChildrenUseCase) ChildrenRegister(ctx context.Context, parentId string,
 	}
 	if err := u.ChildrenRepository.Create(tx, child); err != nil {
 		u.Log.Error(err.Error())
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	coin := &entity.CoinTransaction{
+		ID:      uuid.NewString(),
+		ChildID: child.ID,
+		Amount:  75,
+	}
+	if err := u.CoinRepository.Create(tx, coin); err != nil {
+		u.Log.Error("Failed to create initial coin", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	accessToken, err := u.JWT.GenerateToken(helper.BuildAccessTokenClaims(child.ID, helper.ActorTypeChild, child.ParentId))
@@ -167,4 +178,14 @@ func (u *ChildrenUseCase) ChildrenLogin(ctx context.Context, req *model.Children
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return converter.ChildrenLoginToResponse(child, accessToken, refreshToken), nil
+}
+
+func (u *ChildrenUseCase) GetChildrenCoin(ctx context.Context, childID string) (resp *model.ChildrenCoinResponse, err error) {
+	coin := new(entity.CoinTransaction)
+	if err := u.CoinRepository.FindByChildID(u.DB.WithContext(ctx), coin, childID); err != nil {
+		u.Log.Error("Failed to get coin by child id", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusNotFound, "coin not found")
+	}
+
+	return converter.ChildrenCoinToResponse(coin), nil
 }
