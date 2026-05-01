@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	"example.com/tomo/internal/helper"
 	"example.com/tomo/internal/model"
 	"example.com/tomo/internal/usecase"
 	"github.com/labstack/echo/v5"
@@ -60,4 +61,33 @@ func (u *UserController) RefreshToken(ctx *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ResponseRefreshToken]{Message: "Success refresh token", Data: response})
+}
+func (u *UserController) UpdateProfile(ctx *echo.Context) error {
+	request := new(model.UserUpdateRequest)
+
+	if err := ctx.Bind(request); err != nil {
+		u.Logger.Error("Failed to bind request", zap.Error(err))
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	userId := helper.GetActorID(ctx)
+	if userId == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	actorType := helper.GetActorType(ctx)
+	if actorType != "parent" {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+	}
+
+	response, err := u.UserUseCase.UserUpdateProfile(ctx.Request().Context(), request, userId)
+	if err != nil {
+		u.Logger.Error("Failed to update profile", zap.Error(err))
+		return err // sudah HTTPError dari usecase
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.UserUpdateResponse]{
+		Message: "Update profile success",
+		Data:    response,
+	})
 }

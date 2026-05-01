@@ -135,6 +135,36 @@ func (u *UserUseCase) UserLogin(ctx context.Context, req *model.UserLoginRequest
 	}
 	return converter.UserLoginToResponse(user, accessToken, refreshToken), nil
 }
+func (u *UserUseCase) UserUpdateProfile(ctx context.Context, req *model.UserUpdateRequest, userId string) (resp *model.UserUpdateResponse, err error) {
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	if err := u.Validate.Struct(req); err != nil {
+		u.Log.Error("struct request is invalid")
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	user := new(entity.User)
+
+	err = u.UserRepository.FindByCondition(tx, user, "id = ?", userId)
+	if err != nil {
+		u.Log.Error("Failed to find user", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	user.Username = req.Username
+	user.Email = req.Email
+
+	if err := u.UserRepository.Update(tx, user); err != nil {
+		u.Log.Error("Failed to update user", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("Failed to commit transaction")
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return converter.UserUpdateToResponse(user), nil
+}
+
 func (u *UserUseCase) RefreshToken(ctx context.Context, req *model.RequestRefreshToken) (resp *model.ResponseRefreshToken, err error) {
 	refreshValue, err := u.Redis.Get(ctx, req.RefreshToken).Result()
 	if err != nil {
