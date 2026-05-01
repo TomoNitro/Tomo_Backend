@@ -12,6 +12,7 @@ type RouteConfig struct {
 	UserController        *http.UserController
 	ChildrenController    *http.ChildrenController
 	StoryHeaderController *http.StoryHeaderController
+	MarketController      *http.MarketController
 	JWTHelper             *helper.JWTHelper
 }
 
@@ -27,10 +28,14 @@ func (r *RouteConfig) SetupGuestRoute() {
 	parentOnly := r.App.Group("/api/parent", middleware.AuthMiddleware(r.JWTHelper), middleware.ParentOnly())
 	parentOnly.GET("/story-headers", r.StoryHeaderController.GetAllStoryByParentId)
 
+	childrenOnly := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
+	childrenOnly.GET("/markets", r.MarketController.GetAllMarket)
+
 	children := r.App.Group("/api/children")
 	children.POST("/login", r.ChildrenController.ChildrenLogin)
 
 	parentChildren := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ParentOnly())
 	parentChildren.GET("", r.ChildrenController.GetChildrenByParent)
 	parentChildren.POST("/register", r.ChildrenController.ChildrenRegister)
+
 }
