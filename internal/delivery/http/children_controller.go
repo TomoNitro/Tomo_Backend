@@ -28,7 +28,7 @@ func (c *ChildrenController) ChildrenRegister(ctx *echo.Context) error {
 		c.Logger.Error(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	parentID := helper.GetUserID(ctx)
+	parentID := helper.GetActorID(ctx)
 	response, err := c.ChildrenUseCase.ChildrenRegister(ctx.Request().Context(), parentID, request)
 	if err != nil {
 		c.Logger.Error(err.Error())
@@ -37,7 +37,7 @@ func (c *ChildrenController) ChildrenRegister(ctx *echo.Context) error {
 	return ctx.JSON(http.StatusOK, model.WebResponse[*model.ChildrenRegisterResponse]{Message: "Success create child", Data: response})
 }
 func (c *ChildrenController) ChildrenLogin(ctx *echo.Context) error {
-	request := new(model.ChildrenRequest)
+	request := new(model.ChildrenLoginRequest)
 	if err := ctx.Bind(request); err != nil {
 		c.Logger.Error(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"example.com/tomo/internal/helper"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 )
 
@@ -27,15 +26,38 @@ func AuthMiddleware(jwt *helper.JWTHelper) echo.MiddlewareFunc {
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid or expired token")
 			}
-			userIDstr, ok := claims["sub"].(string)
-			if !ok {
+			tokenClaims, err := helper.ParseTokenClaims(claims)
+			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token claims")
 			}
-			userId, err := uuid.Parse(userIDstr)
-			if err != nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid user ID in token")
+
+			c.Set(helper.ContextActorID, tokenClaims.Subject)
+			c.Set(helper.ContextActorType, tokenClaims.ActorType)
+			c.Set(helper.ContextParentID, tokenClaims.ParentID)
+			return next(c)
+		}
+	}
+}
+
+func ParentOnly() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			if helper.GetActorType(c) != helper.ActorTypeParent {
+				return echo.NewHTTPError(http.StatusForbidden, "Parent access required")
 			}
-			c.Set("user_id", userId.String())
+
+			return next(c)
+		}
+	}
+}
+
+func ChildOnly() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			if helper.GetActorType(c) != helper.ActorTypeChild {
+				return echo.NewHTTPError(http.StatusForbidden, "Child access required")
+			}
+
 			return next(c)
 		}
 	}

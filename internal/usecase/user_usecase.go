@@ -61,14 +61,23 @@ func (u *UserUseCase) UserRegister(ctx context.Context, req *model.UserRequest) 
 		u.Log.Error(err.Error())
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	accessToken, err := u.JWT.JWTGenerator(user.ID)
+	accessToken, err := u.JWT.GenerateToken(helper.BuildAccessTokenClaims(user.ID, helper.ActorTypeParent, user.ID))
 	if err != nil {
 		u.Log.Error("Failed to create token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	refreshToken := uuid.New().String()
+	refreshPayload, err := helper.EncodeRefreshTokenPayload(helper.RefreshTokenPayload{
+		ActorID:   user.ID,
+		ActorType: helper.ActorTypeParent,
+		ParentID:  user.ID,
+	})
+	if err != nil {
+		u.Log.Error("Failed to encode refresh token payload", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
-	err = u.Redis.Set(ctx, refreshToken, user.ID, 24*time.Hour).Err()
+	err = u.Redis.Set(ctx, refreshToken, refreshPayload, 24*time.Hour).Err()
 	if err != nil {
 		u.Log.Error("Failed to set refresh token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -98,14 +107,23 @@ func (u *UserUseCase) UserLogin(ctx context.Context, req *model.UserLoginRequest
 		u.Log.Error("Invalid credentials", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	accessToken, err := u.JWT.JWTGenerator(user.ID)
+	accessToken, err := u.JWT.GenerateToken(helper.BuildAccessTokenClaims(user.ID, helper.ActorTypeParent, user.ID))
 	if err != nil {
 		u.Log.Error("Failed to create token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	refreshToken := uuid.New().String()
+	refreshPayload, err := helper.EncodeRefreshTokenPayload(helper.RefreshTokenPayload{
+		ActorID:   user.ID,
+		ActorType: helper.ActorTypeParent,
+		ParentID:  user.ID,
+	})
+	if err != nil {
+		u.Log.Error("Failed to encode refresh token payload", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
-	err = u.Redis.Set(ctx, refreshToken, user.ID, 24*time.Hour).Err()
+	err = u.Redis.Set(ctx, refreshToken, refreshPayload, 24*time.Hour).Err()
 	if err != nil {
 		u.Log.Error("Failed to set refresh token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -118,12 +136,21 @@ func (u *UserUseCase) UserLogin(ctx context.Context, req *model.UserLoginRequest
 	return converter.UserLoginToResponse(user, accessToken, refreshToken), nil
 }
 func (u *UserUseCase) RefreshToken(ctx context.Context, req *model.RequestRefreshToken) (resp *model.ResponseRefreshToken, err error) {
-	userId, err := u.Redis.Get(ctx, req.RefreshToken).Result()
+	refreshValue, err := u.Redis.Get(ctx, req.RefreshToken).Result()
 	if err != nil {
 		u.Log.Error("Failed to refresh token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	newAccessToken, err := u.JWT.JWTGenerator(userId)
+	refreshPayload, err := helper.DecodeRefreshTokenPayload(refreshValue)
+	if err != nil {
+		u.Log.Error("Failed to decode refresh token payload", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	newAccessToken, err := u.JWT.GenerateToken(helper.BuildAccessTokenClaims(
+		refreshPayload.ActorID,
+		refreshPayload.ActorType,
+		refreshPayload.ParentID,
+	))
 	if err != nil {
 		u.Log.Error("Failed to create new access token", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
