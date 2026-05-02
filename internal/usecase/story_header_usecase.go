@@ -57,6 +57,28 @@ func (s *StoryHeaderUseCase) GetAllStoryByParentId(ctx context.Context, parentId
 	return &response, nil
 }
 
+func (s *StoryHeaderUseCase) GetAllStoryByChildId(ctx context.Context, parentId, childId string) (*[]model.StoryHeaderResponse, error) {
+	tx := s.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	storyHeader, err := s.StoryHeaderRepository.GetAllStoryHeaderByParentAndChildId(tx, parentId, childId)
+	if err != nil {
+		s.Log.Error("Failed to get story header by child id", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := tx.Commit().Error; err != nil {
+		s.Log.Error("Failed to commit transaction")
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	response := make([]model.StoryHeaderResponse, len(*storyHeader))
+	for i, storyHeaders := range *storyHeader {
+		response[i] = *converter.StoryHeaderToResponse(&storyHeaders)
+	}
+
+	return &response, nil
+}
+
 func (s *StoryHeaderUseCase) CreateStory(ctx context.Context, parentID string, req *model.CreateStoryRequest) (resp model.CreateStoryWebhookResponse, err error) {
 	if err := s.Validate.Struct(req); err != nil {
 		s.Log.Error("create story request is invalid", zap.Error(err))
