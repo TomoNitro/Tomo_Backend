@@ -59,6 +59,22 @@ func (c *StoryPlayController) MakeDecision(ctx *echo.Context) error {
 	})
 }
 
+func (c *StoryPlayController) GenerateStoryNodeAudio(ctx *echo.Context) error {
+	nodeID := ctx.Param("nodeId")
+	actorChildID := helper.GetActorID(ctx)
+
+	response, err := c.StoryPlayUseCase.GenerateStoryNodeAudio(ctx.Request().Context(), actorChildID, nodeID)
+	if err != nil {
+		c.Logger.Error("failed to generate story node audio", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.StoryNodeAudioResponse]{
+		Message: "Success generate story node audio",
+		Data:    response,
+	})
+}
+
 func (c *StoryPlayController) GenerateStorySummary(ctx *echo.Context) error {
 	sessionID := ctx.Param("sessionId")
 	actorChildID := helper.GetActorID(ctx)

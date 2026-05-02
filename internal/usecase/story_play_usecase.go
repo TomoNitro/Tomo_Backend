@@ -28,30 +28,32 @@ const (
 )
 
 type StoryPlayUseCase struct {
-	DB                 *gorm.DB
-	Log                *zap.Logger
-	Validate           *validator.Validate
-	StoryPlayRepo      *repository.StoryPlayRepository
-	ChildrenRepository *repository.ChildrenRepository
-	ChildProgressRepo  *repository.ChildProgressRepository
-	ExpTransactionRepo *repository.ExpTransactionRepository
-	CoinRepository     *repository.CoinRepository
-	SummaryWebhookURL  string
-	HTTPClient         *http.Client
+	DB                  *gorm.DB
+	Log                 *zap.Logger
+	Validate            *validator.Validate
+	StoryPlayRepo       *repository.StoryPlayRepository
+	ChildrenRepository  *repository.ChildrenRepository
+	ChildProgressRepo   *repository.ChildProgressRepository
+	ExpTransactionRepo  *repository.ExpTransactionRepository
+	CoinRepository      *repository.CoinRepository
+	SummaryWebhookURL   string
+	NodeAudioWebhookURL string
+	HTTPClient          *http.Client
 }
 
-func NewStoryPlayUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, storyPlayRepo *repository.StoryPlayRepository, childrenRepository *repository.ChildrenRepository, childProgressRepo *repository.ChildProgressRepository, expTransactionRepo *repository.ExpTransactionRepository, coinRepository *repository.CoinRepository, summaryWebhookURL string) *StoryPlayUseCase {
+func NewStoryPlayUseCase(db *gorm.DB, log *zap.Logger, validate *validator.Validate, storyPlayRepo *repository.StoryPlayRepository, childrenRepository *repository.ChildrenRepository, childProgressRepo *repository.ChildProgressRepository, expTransactionRepo *repository.ExpTransactionRepository, coinRepository *repository.CoinRepository, summaryWebhookURL, nodeAudioWebhookURL string) *StoryPlayUseCase {
 	return &StoryPlayUseCase{
-		DB:                 db,
-		Log:                log,
-		Validate:           validate,
-		StoryPlayRepo:      storyPlayRepo,
-		ChildrenRepository: childrenRepository,
-		ChildProgressRepo:  childProgressRepo,
-		ExpTransactionRepo: expTransactionRepo,
-		CoinRepository:     coinRepository,
-		SummaryWebhookURL:  summaryWebhookURL,
-		HTTPClient:         &http.Client{Timeout: 5 * time.Minute},
+		DB:                  db,
+		Log:                 log,
+		Validate:            validate,
+		StoryPlayRepo:       storyPlayRepo,
+		ChildrenRepository:  childrenRepository,
+		ChildProgressRepo:   childProgressRepo,
+		ExpTransactionRepo:  expTransactionRepo,
+		CoinRepository:      coinRepository,
+		SummaryWebhookURL:   summaryWebhookURL,
+		NodeAudioWebhookURL: nodeAudioWebhookURL,
+		HTTPClient:          &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -227,6 +229,82 @@ func (u *StoryPlayUseCase) MakeDecision(ctx context.Context, actorChildID, sessi
 	}
 
 	return response, nil
+}
+
+func (u *StoryPlayUseCase) GenerateStoryNodeAudio(ctx context.Context, actorChildID, nodeID string) (*model.StoryNodeAudioResponse, error) {
+	if actorChildID == "" {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	if nodeID == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "node id is required")
+	}
+
+	storyNode := new(entity.StoryNode)
+	if err := u.StoryPlayRepo.FindStoryNodeByID(u.DB.WithContext(ctx), storyNode, nodeID); err != nil {
+		u.Log.Error("failed to find story node for audio generation", zap.Error(err))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "story node not found")
+		}
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	webhookRequest := model.GenerateStoryNodeAudioWebhookRequest{
+		NodeID: storyNode.NodeID,
+		Text:   storyNode.AudioText,
+	}
+	requestBody, err := json.Marshal(webhookRequest)
+	if err != nil {
+		u.Log.Error("failed to marshal generate story node audio request", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, u.NodeAudioWebhookURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		u.Log.Error("failed to create generate story node audio webhook request", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	httpResponse, err := u.HTTPClient.Do(httpRequest)
+	if err != nil {
+		u.Log.Error("failed to call generate story node audio webhook", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+	defer httpResponse.Body.Close()
+
+	responseBody, err := io.ReadAll(httpResponse.Body)
+	if err != nil {
+		u.Log.Error("failed to read generate story node audio webhook response", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+
+	if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
+		u.Log.Error("generate story node audio webhook returned non-success status",
+			zap.Int("status_code", httpResponse.StatusCode),
+			zap.ByteString("response_body", responseBody),
+		)
+		return nil, echo.NewHTTPError(http.StatusBadGateway, string(responseBody))
+	}
+	if len(responseBody) == 0 {
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "generate story node audio webhook returned empty response")
+	}
+
+	webhookResponse := make(model.GenerateStoryNodeAudioWebhookResponse)
+	if err := json.Unmarshal(responseBody, &webhookResponse); err != nil {
+		u.Log.Error("failed to unmarshal generate story node audio webhook response", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+
+	audioURL := audioURLFromWebhookResponse(webhookResponse)
+	if audioURL == "" {
+		u.Log.Error("generate story node audio webhook returned invalid payload")
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid story node audio response")
+	}
+
+	return &model.StoryNodeAudioResponse{
+		NodeID:   storyNode.NodeID,
+		AudioURL: audioURL,
+	}, nil
 }
 
 func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildID, sessionID string) (*model.StorySummaryRewardResponse, error) {
@@ -463,6 +541,16 @@ func stringFromWebhookValue(value interface{}) string {
 	default:
 		return ""
 	}
+}
+
+func audioURLFromWebhookResponse(response model.GenerateStoryNodeAudioWebhookResponse) string {
+	for _, key := range []string{"audio_url", "audioUrl", "url", "audio"} {
+		if audioURL := stringFromWebhookValue(response[key]); audioURL != "" {
+			return audioURL
+		}
+	}
+
+	return ""
 }
 
 func calculateChildLevel(totalExp int) int {

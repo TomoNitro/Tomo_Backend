@@ -48,6 +48,18 @@ type GenerateStorySummaryWebhookRequest struct {
 
 type GenerateStorySummaryWebhookResponse map[string]interface{}
 
+type GenerateStoryNodeAudioWebhookRequest struct {
+	NodeID string `json:"node_id"`
+	Text   string `json:"text"`
+}
+
+type GenerateStoryNodeAudioWebhookResponse map[string]interface{}
+
+type StoryNodeAudioResponse struct {
+	NodeID   string `json:"node_id"`
+	AudioURL string `json:"audio_url"`
+}
+
 type StorySummaryRewardResponse struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`

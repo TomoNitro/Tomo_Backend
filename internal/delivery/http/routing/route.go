@@ -45,6 +45,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	childrenOnly.PUT("/name", r.ChildrenController.UpdateChildName)
 	childrenOnly.GET("/story-headers", r.StoryHeaderController.GetAllStoryByChildId)
 	childrenOnly.POST("/stories/:storyId/start", r.StoryPlayController.StartStory)
+	childrenOnly.POST("/story-nodes/:nodeId/audio/generate", r.StoryPlayController.GenerateStoryNodeAudio)
 
 	sessionsOnly := r.App.Group("/api/sessions", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
 	sessionsOnly.POST("/:sessionId/decision", r.StoryPlayController.MakeDecision)
