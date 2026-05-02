@@ -59,3 +59,22 @@ func (c *DashboardController) GenerateChildDashboardSummary(ctx *echo.Context) e
 		Data:    response,
 	})
 }
+
+func (c *DashboardController) GetLatestChildDashboardSummary(ctx *echo.Context) error {
+	parentID := helper.GetActorID(ctx)
+	if parentID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	childID := ctx.Param("childId")
+	response, err := c.DashboardUseCase.GetLatestChildDashboardSummary(ctx.Request().Context(), parentID, childID)
+	if err != nil {
+		c.Logger.Error("failed to get latest child dashboard summary", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.DashboardSummaryResponse]{
+		Message: "Success get child dashboard summary",
+		Data:    response,
+	})
+}

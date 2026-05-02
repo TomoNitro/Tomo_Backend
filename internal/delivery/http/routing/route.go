@@ -37,6 +37,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	parentOnly.PUT("/update", r.UserController.UpdateProfile)
 	parentOnly.GET("/info", r.UserController.GetParentInfo)
 	parentOnly.GET("/children/:childId/dashboard", r.DashboardController.GetChildDashboard)
+	parentOnly.GET("/children/:childId/dashboard/summary", r.DashboardController.GetLatestChildDashboardSummary)
 	parentOnly.POST("/children/:childId/dashboard/summary/generate", r.DashboardController.GenerateChildDashboardSummary)
 
 	childrenOnly := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())

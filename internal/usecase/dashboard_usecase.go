@@ -176,6 +176,40 @@ func (u *DashboardUseCase) GenerateChildDashboardSummary(ctx context.Context, pa
 	return response, nil
 }
 
+func (u *DashboardUseCase) GetLatestChildDashboardSummary(ctx context.Context, parentID, childID string) (*model.DashboardSummaryResponse, error) {
+	if childID == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "child id is required")
+	}
+
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	child := new(entity.Children)
+	if err := u.ChildrenRepository.FindByIDAndParentID(tx, child, childID, parentID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "child not found")
+		}
+		u.Log.Error("failed to find child by parent", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	summary, err := u.DashboardRepository.FindLatestDashboardSummaryByChildID(tx, childID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "dashboard summary not found")
+		}
+		u.Log.Error("failed to find latest dashboard summary", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("failed to commit get dashboard summary transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return dashboardSummaryToResponse(summary), nil
+}
+
 func (u *DashboardUseCase) buildChildDashboardResponse(tx *gorm.DB, childID string) (*model.ParentChildDashboardResponse, error) {
 	wiseCount, impulsiveCount, err := u.DashboardRepository.CountDecisionsByWise(tx, childID)
 	if err != nil {
@@ -263,4 +297,15 @@ func (u *DashboardUseCase) buildChildDashboardResponse(tx *gorm.DB, childID stri
 		FinancialTrend: trend,
 		DaysActive:     daysActive,
 	}, nil
+}
+
+func dashboardSummaryToResponse(summary *entity.DashboardSummary) *model.DashboardSummaryResponse {
+	return &model.DashboardSummaryResponse{
+		ID:               summary.ID,
+		ChildID:          summary.ChildID,
+		Summary:          summary.Summary,
+		PerformanceLevel: summary.PerformanceLevel,
+		Suggestion:       summary.Suggestion,
+		CreatedAt:        summary.CreatedAt.Format(time.RFC3339Nano),
+	}
 }

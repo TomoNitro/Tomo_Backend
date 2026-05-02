@@ -106,3 +106,14 @@ func (r *DashboardRepository) CountActiveDays(db *gorm.DB, childID string) (int6
 
 	return count, nil
 }
+
+func (r *DashboardRepository) FindLatestDashboardSummaryByChildID(db *gorm.DB, childID string) (*entity.DashboardSummary, error) {
+	summary := new(entity.DashboardSummary)
+	if err := db.Where("child_id = ?", childID).
+		Order("created_at DESC").
+		First(summary).Error; err != nil {
+		return nil, err
+	}
+
+	return summary, nil
+}
