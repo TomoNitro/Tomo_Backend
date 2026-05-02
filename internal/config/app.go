@@ -35,6 +35,8 @@ func BootStrap(config *BootStrapConfig) {
 	storyHeaderRepository := repository.NewStoryHeaderRepository(config.Log)
 	storyPlayRepository := repository.NewStoryPlayRepository(config.Log)
 	childProgressRepository := repository.NewChildProgressRepository(config.Log)
+	badgeRepository := repository.NewBadgeRepository(config.Log)
+	childBadgeRepository := repository.NewChildBadgeRepository(config.Log)
 	expTransactionRepository := repository.NewExpTransactionRepository(config.Log)
 	MarketRepository := repository.NewMarketRepository(config.Log)
 	storyWebhookURL := config.Config.GetString("STORY_WEBHOOK_URL")
@@ -59,6 +61,7 @@ func BootStrap(config *BootStrapConfig) {
 	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
 	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository, childProgressRepository, expTransactionRepository, coinRepository, summaryWebhookURL, nodeAudioWebhookURL)
+	progressUseCase := usecase.NewProgressUseCase(config.DB, config.Log, childProgressRepository, badgeRepository, childBadgeRepository)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
@@ -66,6 +69,7 @@ func BootStrap(config *BootStrapConfig) {
 	themeController := http.NewThemeController(themeUseCase, config.Log)
 	storyHeaderController := http.NewStoryHeaderController(storyHeaderUseCase, config.Log)
 	storyPlayController := http.NewStoryPlayController(storyPlayUseCase, config.Log)
+	progressController := http.NewProgressController(progressUseCase, config.Log)
 	MarketController := http.NewMarketController(MarketUseCase, config.Log)
 
 	routeConfig := routing.RouteConfig{
@@ -76,6 +80,7 @@ func BootStrap(config *BootStrapConfig) {
 		ThemeController:       themeController,
 		StoryHeaderController: storyHeaderController,
 		StoryPlayController:   storyPlayController,
+		ProgressController:    progressController,
 		MarketController:      MarketController,
 		JWTHelper:             config.JWT,
 	}
