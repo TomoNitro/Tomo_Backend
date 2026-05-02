@@ -40,3 +40,22 @@ func (c *DashboardController) GetChildDashboard(ctx *echo.Context) error {
 		Data:    response,
 	})
 }
+
+func (c *DashboardController) GenerateChildDashboardSummary(ctx *echo.Context) error {
+	parentID := helper.GetActorID(ctx)
+	if parentID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	childID := ctx.Param("childId")
+	response, err := c.DashboardUseCase.GenerateChildDashboardSummary(ctx.Request().Context(), parentID, childID)
+	if err != nil {
+		c.Logger.Error("failed to generate child dashboard summary", zap.Error(err))
+		return err
+	}
+
+	return ctx.JSON(http.StatusOK, model.WebResponse[*model.DashboardSummaryResponse]{
+		Message: "Success generate child dashboard summary",
+		Data:    response,
+	})
+}
