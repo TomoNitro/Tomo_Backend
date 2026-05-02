@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -22,9 +23,12 @@ import (
 )
 
 const (
-	storyChoiceWise        = "wise"
-	storyChoiceImpulsive   = "impulsive"
-	expSourceStoryComplete = "story_complete"
+	storyChoiceWise            = "wise"
+	storyChoiceImpulsive       = "impulsive"
+	expSourceStoryComplete     = "story_complete"
+	summaryWebhookMaxAttempts  = 3
+	summaryWebhookBaseBackoff  = 500 * time.Millisecond
+	summaryWebhookLogBodyLimit = 2048
 )
 
 type StoryPlayUseCase struct {
@@ -353,53 +357,26 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, u.SummaryWebhookURL, bytes.NewBuffer(requestBody))
+	responseBody, err := u.callSummaryWebhook(ctx, requestBody, session.SessionID, actorChildID)
 	if err != nil {
-		u.Log.Error("failed to create generate story summary webhook request", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-	httpRequest.Header.Set("Content-Type", "application/json")
-
-	httpResponse, err := u.HTTPClient.Do(httpRequest)
-	if err != nil {
-		u.Log.Error("failed to call generate story summary webhook", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
-	}
-	defer httpResponse.Body.Close()
-
-	responseBody, err := io.ReadAll(httpResponse.Body)
-	if err != nil {
-		u.Log.Error("failed to read generate story summary webhook response", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
-	}
-
-	if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
-		u.Log.Error("generate story summary webhook returned non-success status",
-			zap.Int("status_code", httpResponse.StatusCode),
-			zap.ByteString("response_body", responseBody),
-		)
-		return nil, echo.NewHTTPError(http.StatusBadGateway, string(responseBody))
+		return nil, err
 	}
 
 	webhookResponse := make(model.GenerateStorySummaryWebhookResponse)
-	if len(responseBody) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadGateway, "generate story summary webhook returned empty response")
-	}
-
 	if err := json.Unmarshal(responseBody, &webhookResponse); err != nil {
 		u.Log.Error("failed to unmarshal generate story summary webhook response", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid story summary response")
 	}
 
 	exp, err := intFromWebhookValue(webhookResponse["exp"])
 	if err != nil {
 		u.Log.Error("failed to parse exp reward", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid exp reward from webhook")
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid exp reward from summary service")
 	}
 	coins, err := intFromWebhookValue(webhookResponse["coins"])
 	if err != nil {
 		u.Log.Error("failed to parse coin reward", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid coin reward from webhook")
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid coin reward from summary service")
 	}
 
 	summaryID := stringFromWebhookValue(webhookResponse["id"])
@@ -408,7 +385,7 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 	summaryPerformance := stringFromWebhookValue(webhookResponse["performance"])
 	if summaryID == "" || summaryPerformance == "" {
 		u.Log.Error("generate story summary webhook returned invalid payload")
-		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid story summary response")
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid story summary response from summary service")
 	}
 
 	tx := u.DB.WithContext(ctx).Begin()
@@ -522,6 +499,86 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 	}, nil
 }
 
+func (u *StoryPlayUseCase) callSummaryWebhook(ctx context.Context, requestBody []byte, sessionID, childID string) ([]byte, error) {
+	backoff := summaryWebhookBaseBackoff
+	for attempt := 1; attempt <= summaryWebhookMaxAttempts; attempt++ {
+		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, u.SummaryWebhookURL, bytes.NewBuffer(requestBody))
+		if err != nil {
+			u.Log.Error("failed to create generate story summary webhook request", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		httpRequest.Header.Set("Content-Type", "application/json")
+
+		httpResponse, err := u.HTTPClient.Do(httpRequest)
+		if err != nil {
+			u.Log.Error("failed to call generate story summary webhook",
+				zap.Error(err),
+				zap.Int("attempt", attempt),
+				zap.String("session_id", sessionID),
+				zap.String("child_id", childID),
+			)
+			if attempt < summaryWebhookMaxAttempts {
+				time.Sleep(backoff)
+				backoff *= 2
+				continue
+			}
+			return nil, echo.NewHTTPError(http.StatusBadGateway, "story summary service unavailable")
+		}
+
+		responseBody, readErr := io.ReadAll(httpResponse.Body)
+		httpResponse.Body.Close()
+		if readErr != nil {
+			u.Log.Error("failed to read generate story summary webhook response",
+				zap.Error(readErr),
+				zap.Int("attempt", attempt),
+				zap.String("session_id", sessionID),
+				zap.String("child_id", childID),
+			)
+			if attempt < summaryWebhookMaxAttempts {
+				time.Sleep(backoff)
+				backoff *= 2
+				continue
+			}
+			return nil, echo.NewHTTPError(http.StatusBadGateway, "story summary service response read failed")
+		}
+
+		if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
+			u.Log.Error("generate story summary webhook returned non-success status",
+				zap.Int("status_code", httpResponse.StatusCode),
+				zap.ByteString("response_body", truncateLogBytes(responseBody, summaryWebhookLogBodyLimit)),
+				zap.Int("attempt", attempt),
+				zap.String("session_id", sessionID),
+				zap.String("child_id", childID),
+			)
+			if shouldRetrySummaryStatus(httpResponse.StatusCode) && attempt < summaryWebhookMaxAttempts {
+				time.Sleep(backoff)
+				backoff *= 2
+				continue
+			}
+			return nil, echo.NewHTTPError(http.StatusBadGateway, fmt.Sprintf("story summary service returned status %d", httpResponse.StatusCode))
+		}
+
+		if len(responseBody) == 0 {
+			u.Log.Error("generate story summary webhook returned empty response",
+				zap.Int("status_code", httpResponse.StatusCode),
+				zap.Int("attempt", attempt),
+				zap.String("session_id", sessionID),
+				zap.String("child_id", childID),
+			)
+			if attempt < summaryWebhookMaxAttempts {
+				time.Sleep(backoff)
+				backoff *= 2
+				continue
+			}
+			return nil, echo.NewHTTPError(http.StatusBadGateway, "story summary service returned empty response")
+		}
+
+		return responseBody, nil
+	}
+
+	return nil, echo.NewHTTPError(http.StatusBadGateway, "story summary service unavailable")
+}
+
 func intFromWebhookValue(value interface{}) (int, error) {
 	switch typedValue := value.(type) {
 	case string:
@@ -560,6 +617,24 @@ func audioURLFromWebhookResponse(response model.GenerateStoryNodeAudioWebhookRes
 	}
 
 	return ""
+}
+
+func shouldRetrySummaryStatus(status int) bool {
+	if status == http.StatusRequestTimeout || status == http.StatusTooManyRequests {
+		return true
+	}
+	return status >= http.StatusInternalServerError
+}
+
+func truncateLogBytes(value []byte, limit int) []byte {
+	if len(value) <= limit {
+		return value
+	}
+
+	trimmed := make([]byte, limit+15)
+	copy(trimmed, value[:limit])
+	copy(trimmed[limit:], []byte("... (truncated)"))
+	return trimmed
 }
 
 func calculateChildLevel(totalExp int) int {
