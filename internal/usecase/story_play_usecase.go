@@ -315,6 +315,15 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid coin reward from webhook")
 	}
 
+	summaryID := stringFromWebhookValue(webhookResponse["id"])
+	summaryTitle := stringFromWebhookValue(webhookResponse["title"])
+	summaryDescription := stringFromWebhookValue(webhookResponse["description"])
+	summaryPerformance := stringFromWebhookValue(webhookResponse["performance"])
+	if summaryID == "" || summaryPerformance == "" {
+		u.Log.Error("generate story summary webhook returned invalid payload")
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid story summary response")
+	}
+
 	tx := u.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
@@ -336,6 +345,21 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 	}
 	if rewardCount > 0 {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "story summary reward already claimed")
+	}
+
+	summary := &entity.StorySummary{
+		ID:          summaryID,
+		Title:       summaryTitle,
+		Description: summaryDescription,
+		Performance: summaryPerformance,
+	}
+	if err := u.StoryPlayRepo.CreateStorySummary(tx, summary); err != nil {
+		u.Log.Error("failed to create story summary", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := u.StoryPlayRepo.UpdateLearningSessionSummaryID(tx, session.SessionID, summary.ID); err != nil {
+		u.Log.Error("failed to update learning session summary", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	progress := new(entity.ChildProgress)

@@ -11,6 +11,7 @@ type RouteConfig struct {
 	App                   *echo.Echo
 	UserController        *http.UserController
 	ChildrenController    *http.ChildrenController
+	DashboardController   *http.DashboardController
 	ThemeController       *http.ThemeController
 	StoryHeaderController *http.StoryHeaderController
 	StoryPlayController   *http.StoryPlayController
@@ -35,6 +36,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	parentOnly.POST("/story-headers/generate", r.StoryHeaderController.CreateStory)
 	parentOnly.PUT("/update", r.UserController.UpdateProfile)
 	parentOnly.GET("/info", r.UserController.GetParentInfo)
+	parentOnly.GET("/children/:childId/dashboard", r.DashboardController.GetChildDashboard)
 
 	childrenOnly := r.App.Group("/api/children", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
 	childrenOnly.GET("/markets", r.MarketController.GetAllMarket)

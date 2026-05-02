@@ -27,6 +27,7 @@ type BootStrapConfig struct {
 func BootStrap(config *BootStrapConfig) {
 	userRepository := repository.NewUserRepository(config.Log)
 	childrenRepository := repository.NewChildrenRepository(config.Log)
+	dashboardRepository := repository.NewDashboardRepository(config.Log)
 	coinRepository := repository.NewCoinRepository(config.Log)
 	savingGoalRepository := repository.NewSavingGoalRepository(config.Log)
 	financeThemeRepository := repository.NewFinanceThemeRepository(config.Log)
@@ -46,12 +47,14 @@ func BootStrap(config *BootStrapConfig) {
 	}
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
+	dashboardUseCase := usecase.NewDashboardUseCase(config.DB, config.Log, childrenRepository, dashboardRepository)
 	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
 	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository, childProgressRepository, expTransactionRepository, coinRepository, summaryWebhookURL)
 	MarketUseCase := usecase.NewMarketUseCase(config.DB, config.Log, config.Validate, MarketRepository)
 	userController := http.NewUserController(userUseCase, config.Log)
 	childrenController := http.NewChildrenController(childrenUseCase, config.Log)
+	dashboardController := http.NewDashboardController(dashboardUseCase, config.Log)
 	themeController := http.NewThemeController(themeUseCase, config.Log)
 	storyHeaderController := http.NewStoryHeaderController(storyHeaderUseCase, config.Log)
 	storyPlayController := http.NewStoryPlayController(storyPlayUseCase, config.Log)
@@ -61,6 +64,7 @@ func BootStrap(config *BootStrapConfig) {
 		App:                   config.App,
 		UserController:        userController,
 		ChildrenController:    childrenController,
+		DashboardController:   dashboardController,
 		ThemeController:       themeController,
 		StoryHeaderController: storyHeaderController,
 		StoryPlayController:   storyPlayController,
