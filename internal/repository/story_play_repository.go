@@ -20,6 +20,10 @@ func (r *StoryPlayRepository) FindStoryHeaderByID(db *gorm.DB, storyHeader *enti
 	return db.Where("story_id = ?", storyID).First(storyHeader).Error
 }
 
+func (r *StoryPlayRepository) FindStorySummaryByID(db *gorm.DB, summary *entity.StorySummary, summaryID string) error {
+	return db.Where("id = ?", summaryID).First(summary).Error
+}
+
 func (r *StoryPlayRepository) FindStoryNodeByID(db *gorm.DB, storyNode *entity.StoryNode, nodeID string) error {
 	return db.Where("node_id = ?", nodeID).First(storyNode).Error
 }
