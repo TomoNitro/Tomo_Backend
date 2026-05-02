@@ -736,5 +736,5 @@ func calculateChildLevel(totalExp int) int {
 		return 1
 	}
 
-	return (totalExp / 100) + 1
+	return (totalExp / 50) + 1
 }

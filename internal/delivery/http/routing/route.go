@@ -15,6 +15,7 @@ type RouteConfig struct {
 	ThemeController       *http.ThemeController
 	StoryHeaderController *http.StoryHeaderController
 	StoryPlayController   *http.StoryPlayController
+	ProgressController    *http.ProgressController
 	MarketController      *http.MarketController
 	JWTHelper             *helper.JWTHelper
 }
@@ -48,6 +49,7 @@ func (r *RouteConfig) SetupGuestRoute() {
 	childrenOnly.GET("/story-headers", r.StoryHeaderController.GetAllStoryByChildId)
 	childrenOnly.POST("/stories/:storyId/start", r.StoryPlayController.StartStory)
 	childrenOnly.POST("/story-nodes/:nodeId/audio/generate", r.StoryPlayController.GenerateStoryNodeAudio)
+	childrenOnly.GET("/progress", r.ProgressController.GetChildProgress)
 
 	sessionsOnly := r.App.Group("/api/sessions", middleware.AuthMiddleware(r.JWTHelper), middleware.ChildOnly())
 	sessionsOnly.POST("/:sessionId/decision", r.StoryPlayController.MakeDecision)
