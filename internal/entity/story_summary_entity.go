@@ -7,7 +7,7 @@ type StorySummary struct {
 	Title       string    `gorm:"column:title"`
 	Description string    `gorm:"column:description"`
 	Performance string    `gorm:"column:performance"`
-	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
+	CreatedAt   time.Time `gorm:"-"`
 }
 
 func (s *StorySummary) TableName() string {

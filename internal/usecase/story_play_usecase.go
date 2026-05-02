@@ -359,6 +359,15 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 
 	responseBody, err := u.callSummaryWebhook(ctx, requestBody, session.SessionID, actorChildID)
 	if err != nil {
+		fallbackResponse, fallbackErr := u.buildSummaryResponseFromDB(ctx, session.SessionID, actorChildID)
+		if fallbackErr == nil {
+			u.Log.Warn("summary webhook failed; returning summary from database",
+				zap.String("session_id", session.SessionID),
+				zap.String("child_id", actorChildID),
+				zap.Error(err),
+			)
+			return fallbackResponse, nil
+		}
 		return nil, err
 	}
 
@@ -495,6 +504,79 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 		Coins:       coins,
 		TotalExp:    progress.TotalExp,
 		Level:       progress.Level,
+		TotalCoins:  totalCoins,
+	}, nil
+}
+
+func (u *StoryPlayUseCase) buildSummaryResponseFromDB(ctx context.Context, sessionID, actorChildID string) (*model.StorySummaryRewardResponse, error) {
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	session := new(entity.LearningSession)
+	if err := u.StoryPlayRepo.FindLearningSessionByIDAndChildID(tx, session, sessionID, actorChildID); err != nil {
+		u.Log.Error("failed to find learning session for summary fallback", zap.Error(err))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "session not found")
+		}
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if session.SummaryID == nil || *session.SummaryID == "" {
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "story summary not linked to session")
+	}
+
+	summary := new(entity.StorySummary)
+	if err := u.StoryPlayRepo.FindStorySummaryByID(tx, summary, *session.SummaryID); err != nil {
+		u.Log.Error("failed to find story summary for fallback", zap.Error(err))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "story summary not found")
+		}
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	expAmount := 0
+	expTransaction := new(entity.ExpTransaction)
+	if err := u.ExpTransactionRepo.FindBySourceAndReferenceID(tx, expTransaction, expSourceStoryComplete, session.SessionID); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			u.Log.Error("failed to find exp transaction for fallback", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	} else {
+		expAmount = expTransaction.Amount
+	}
+
+	progressTotal := 0
+	progressLevel := 1
+	progress := new(entity.ChildProgress)
+	if err := u.ChildProgressRepo.FindByChildID(tx, progress, actorChildID); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			u.Log.Error("failed to find child progress for fallback", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	} else {
+		progressTotal = progress.TotalExp
+		progressLevel = progress.Level
+	}
+
+	totalCoins, err := u.CoinRepository.SumAmountByChildID(tx, actorChildID)
+	if err != nil {
+		u.Log.Error("failed to get child coin total for fallback", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("failed to commit summary fallback transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return &model.StorySummaryRewardResponse{
+		ID:          summary.ID,
+		Title:       summary.Title,
+		Description: summary.Description,
+		Performance: summary.Performance,
+		Exp:         expAmount,
+		Coins:       0,
+		TotalExp:    progressTotal,
+		Level:       progressLevel,
 		TotalCoins:  totalCoins,
 	}, nil
 }

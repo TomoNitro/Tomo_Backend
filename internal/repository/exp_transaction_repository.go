@@ -27,3 +27,7 @@ func (r *ExpTransactionRepository) CountBySourceAndReferenceID(db *gorm.DB, sour
 
 	return count, nil
 }
+
+func (r *ExpTransactionRepository) FindBySourceAndReferenceID(db *gorm.DB, transaction *entity.ExpTransaction, source, referenceID string) error {
+	return db.Where("source = ? AND reference_id = ?", source, referenceID).First(transaction).Error
+}
