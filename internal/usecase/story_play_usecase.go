@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	storyChoiceWise        = "wise"
-	storyChoiceImpulsive   = "impulsive"
-	expSourceStoryComplete = "story_complete"
+	storyChoiceWise            = "wise"
+	storyChoiceImpulsive       = "impulsive"
+	expSourceStoryComplete     = "story_complete"
 	summaryWebhookMaxAttempts  = 3
 	summaryWebhookBaseBackoff  = 500 * time.Millisecond
 	summaryWebhookLogBodyLimit = 2048
