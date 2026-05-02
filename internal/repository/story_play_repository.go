@@ -50,3 +50,13 @@ func (r *StoryPlayRepository) CountDecisionsBySessionID(db *gorm.DB, sessionID s
 
 	return count, nil
 }
+
+func (r *StoryPlayRepository) CreateStorySummary(db *gorm.DB, summary *entity.StorySummary) error {
+	return db.Create(summary).Error
+}
+
+func (r *StoryPlayRepository) UpdateLearningSessionSummaryID(db *gorm.DB, sessionID, summaryID string) error {
+	return db.Model(&entity.LearningSession{}).
+		Where("session_id = ?", sessionID).
+		Update("summary_id", summaryID).Error
+}
