@@ -426,11 +426,23 @@ func (u *StoryPlayUseCase) GenerateStorySummary(ctx context.Context, actorChildI
 		Description: summaryDescription,
 		Performance: summaryPerformance,
 	}
-	if err := u.StoryPlayRepo.CreateStorySummary(tx, summary); err != nil {
-		u.Log.Error("failed to create story summary", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	existingSummary := new(entity.StorySummary)
+	if err := u.StoryPlayRepo.FindStorySummaryByID(tx, existingSummary, summaryID); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			u.Log.Error("failed to check existing story summary", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		if err := u.StoryPlayRepo.CreateStorySummary(tx, summary); err != nil {
+			u.Log.Error("failed to create story summary", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	} else {
+		u.Log.Info("story summary already exists; skipping insert",
+			zap.String("summary_id", summaryID),
+			zap.String("session_id", session.SessionID),
+		)
 	}
-	if err := u.StoryPlayRepo.UpdateLearningSessionSummaryID(tx, session.SessionID, summary.ID); err != nil {
+	if err := u.StoryPlayRepo.UpdateLearningSessionSummaryID(tx, session.SessionID, summaryID); err != nil {
 		u.Log.Error("failed to update learning session summary", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
