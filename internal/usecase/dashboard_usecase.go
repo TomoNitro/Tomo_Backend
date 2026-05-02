@@ -1,9 +1,13 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"time"
 
 	"example.com/tomo/internal/entity"
 	"example.com/tomo/internal/model"
@@ -16,18 +20,22 @@ import (
 const storySummaryPerformanceWise = "wise"
 
 type DashboardUseCase struct {
-	DB                  *gorm.DB
-	Log                 *zap.Logger
-	ChildrenRepository  *repository.ChildrenRepository
-	DashboardRepository *repository.DashboardRepository
+	DB                         *gorm.DB
+	Log                        *zap.Logger
+	ChildrenRepository         *repository.ChildrenRepository
+	DashboardRepository        *repository.DashboardRepository
+	DashboardSummaryWebhookURL string
+	HTTPClient                 *http.Client
 }
 
-func NewDashboardUseCase(db *gorm.DB, log *zap.Logger, childrenRepository *repository.ChildrenRepository, dashboardRepository *repository.DashboardRepository) *DashboardUseCase {
+func NewDashboardUseCase(db *gorm.DB, log *zap.Logger, childrenRepository *repository.ChildrenRepository, dashboardRepository *repository.DashboardRepository, dashboardSummaryWebhookURL string) *DashboardUseCase {
 	return &DashboardUseCase{
-		DB:                  db,
-		Log:                 log,
-		ChildrenRepository:  childrenRepository,
-		DashboardRepository: dashboardRepository,
+		DB:                         db,
+		Log:                        log,
+		ChildrenRepository:         childrenRepository,
+		DashboardRepository:        dashboardRepository,
+		DashboardSummaryWebhookURL: dashboardSummaryWebhookURL,
+		HTTPClient:                 &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -48,6 +56,127 @@ func (u *DashboardUseCase) GetChildDashboard(ctx context.Context, parentID, chil
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	response, err := u.buildChildDashboardResponse(tx, childID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("failed to commit dashboard transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return response, nil
+}
+
+func (u *DashboardUseCase) GenerateChildDashboardSummary(ctx context.Context, parentID, childID string) (*model.DashboardSummaryResponse, error) {
+	if childID == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "child id is required")
+	}
+
+	tx := u.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	child := new(entity.Children)
+	if err := u.ChildrenRepository.FindByIDAndParentID(tx, child, childID, parentID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "child not found")
+		}
+		u.Log.Error("failed to find child by parent", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	dashboard, err := u.buildChildDashboardResponse(tx, childID)
+	if err != nil {
+		return nil, err
+	}
+
+	savingProgress := make([]model.DashboardSummarySavingProgress, 0, 1)
+	if dashboard.SavingGoal != nil {
+		goal, err := u.DashboardRepository.FindSavingGoalByChildID(tx, childID)
+		if err != nil {
+			u.Log.Error("failed to find saving goal for dashboard summary", zap.Error(err))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		savingProgress = append(savingProgress, model.DashboardSummarySavingProgress{
+			GoalID:             goal.ID,
+			GoalName:           dashboard.SavingGoal.GoalName,
+			CurrentCoin:        dashboard.SavingGoal.CurrentCoin,
+			TargetCoin:         dashboard.SavingGoal.TargetCoin,
+			ProgressPercentage: dashboard.SavingGoal.ProgressPercentage,
+		})
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		u.Log.Error("failed to commit dashboard summary transaction", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	webhookRequest := model.GenerateDashboardSummaryWebhookRequest{
+		Child: model.DashboardSummaryChild{
+			ID:   child.ID,
+			Name: child.Name,
+		},
+		DecisionSummary: dashboard.DecisionSummary,
+		StorySummary: model.DashboardSummaryStorySummary{
+			TotalCompleted: dashboard.StorySummary.TotalCompletedStories,
+			SuccessRate:    dashboard.StorySummary.SuccessRate,
+		},
+		SavingProgress: savingProgress,
+		FinancialTrend: dashboard.FinancialTrend,
+	}
+
+	requestBody, err := json.Marshal(webhookRequest)
+	if err != nil {
+		u.Log.Error("failed to marshal generate dashboard summary request", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, u.DashboardSummaryWebhookURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		u.Log.Error("failed to create generate dashboard summary webhook request", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	httpResponse, err := u.HTTPClient.Do(httpRequest)
+	if err != nil {
+		u.Log.Error("failed to call generate dashboard summary webhook", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+	defer httpResponse.Body.Close()
+
+	responseBody, err := io.ReadAll(httpResponse.Body)
+	if err != nil {
+		u.Log.Error("failed to read generate dashboard summary webhook response", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+
+	if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
+		u.Log.Error("generate dashboard summary webhook returned non-success status",
+			zap.Int("status_code", httpResponse.StatusCode),
+			zap.ByteString("response_body", responseBody),
+		)
+		return nil, echo.NewHTTPError(http.StatusBadGateway, string(responseBody))
+	}
+	if len(responseBody) == 0 {
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "generate dashboard summary webhook returned empty response")
+	}
+
+	response := new(model.DashboardSummaryResponse)
+	if err := json.Unmarshal(responseBody, response); err != nil {
+		u.Log.Error("failed to unmarshal generate dashboard summary webhook response", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadGateway, err.Error())
+	}
+	if response.ID == "" || response.ChildID == "" || response.Summary == "" {
+		u.Log.Error("generate dashboard summary webhook returned invalid payload")
+		return nil, echo.NewHTTPError(http.StatusBadGateway, "invalid dashboard summary response")
+	}
+
+	return response, nil
+}
+
+func (u *DashboardUseCase) buildChildDashboardResponse(tx *gorm.DB, childID string) (*model.ParentChildDashboardResponse, error) {
 	wiseCount, impulsiveCount, err := u.DashboardRepository.CountDecisionsByWise(tx, childID)
 	if err != nil {
 		u.Log.Error("failed to count decisions", zap.Error(err))
@@ -116,11 +245,6 @@ func (u *DashboardUseCase) GetChildDashboard(ctx context.Context, parentID, chil
 	daysActive, err := u.DashboardRepository.CountActiveDays(tx, childID)
 	if err != nil {
 		u.Log.Error("failed to count active days", zap.Error(err))
-		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		u.Log.Error("failed to commit dashboard transaction", zap.Error(err))
 		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 

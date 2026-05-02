@@ -49,9 +49,13 @@ func BootStrap(config *BootStrapConfig) {
 	if nodeAudioWebhookURL == "" {
 		nodeAudioWebhookURL = "https://williamdarma-n8n.hf.space/webhook/generate-image-audio"
 	}
+	dashboardSummaryWebhookURL := config.Config.GetString("DASHBOARD_SUMMARY_WEBHOOK_URL")
+	if dashboardSummaryWebhookURL == "" {
+		dashboardSummaryWebhookURL = "https://williamdarma-n8n.hf.space/webhook/generate-dashboard-summary"
+	}
 	userUseCase := usecase.NewUserUsecase(config.DB, config.Log, config.Validate, userRepository, config.JWT, config.Redis)
 	childrenUseCase := usecase.NewChildrenUseCase(config.DB, config.Log, config.Validate, childrenRepository, coinRepository, savingGoalRepository, MarketRepository, config.JWT, config.Redis)
-	dashboardUseCase := usecase.NewDashboardUseCase(config.DB, config.Log, childrenRepository, dashboardRepository)
+	dashboardUseCase := usecase.NewDashboardUseCase(config.DB, config.Log, childrenRepository, dashboardRepository, dashboardSummaryWebhookURL)
 	themeUseCase := usecase.NewThemeUseCase(config.DB, config.Log, financeThemeRepository, storyThemeRepository)
 	storyHeaderUseCase := usecase.NewStoryHeaderUseCase(config.DB, config.Log, config.Validate, storyHeaderRepository, storyWebhookURL)
 	storyPlayUseCase := usecase.NewStoryPlayUseCase(config.DB, config.Log, config.Validate, storyPlayRepository, childrenRepository, childProgressRepository, expTransactionRepository, coinRepository, summaryWebhookURL, nodeAudioWebhookURL)
