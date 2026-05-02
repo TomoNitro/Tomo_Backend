@@ -68,7 +68,8 @@ func (p *StoryHeaderController) GetAllStoryByChildId(ctx *echo.Context) error {
 	}
 
 	parentID := helper.GetParentID(ctx)
-	response, err := p.StoryHeaderUseCase.GetAllStoryByParentId(ctx.Request().Context(), parentID)
+	childID := helper.GetActorID(ctx)
+	response, err := p.StoryHeaderUseCase.GetAllStoryByChildId(ctx.Request().Context(), parentID, childID)
 	if err != nil {
 		p.Logger.Error("Failed to get story headers")
 		return echo.NewHTTPError(http.StatusBadRequest, "bad request")

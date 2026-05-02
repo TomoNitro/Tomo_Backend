@@ -89,6 +89,15 @@ func (u *StoryPlayUseCase) StartStory(ctx context.Context, actorChildID, storyID
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "story root node is missing")
 	}
 
+	completed, err := u.StoryPlayRepo.HasCompletedStory(tx, actorChildID, storyHeader.StoryID)
+	if err != nil {
+		u.Log.Error("failed to check completed story", zap.Error(err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if completed {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "story already completed")
+	}
+
 	rootNode := new(entity.StoryNode)
 	if err := u.StoryPlayRepo.FindStoryNodeByID(tx, rootNode, *storyHeader.RootStoryID); err != nil {
 		u.Log.Error("failed to find root story node", zap.Error(err))

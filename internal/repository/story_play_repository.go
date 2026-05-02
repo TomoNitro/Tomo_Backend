@@ -51,6 +51,17 @@ func (r *StoryPlayRepository) CountDecisionsBySessionID(db *gorm.DB, sessionID s
 	return count, nil
 }
 
+func (r *StoryPlayRepository) HasCompletedStory(db *gorm.DB, childID, storyID string) (bool, error) {
+	var count int64
+	if err := db.Model(&entity.LearningSession{}).
+		Where("child_id = ? AND story_id = ? AND completed_at IS NOT NULL", childID, storyID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func (r *StoryPlayRepository) CreateStorySummary(db *gorm.DB, summary *entity.StorySummary) error {
 	return db.Create(summary).Error
 }
